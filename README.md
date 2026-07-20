@@ -1,98 +1,51 @@
-# vinext-starter
+# Velocity Venue + Command
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+A working product concept for Virtual Velocity: a branded virtual-event venue for attendees paired with a live producer command center.
 
-## Prerequisites
+## What is included
 
-- Node.js `>=22.13.0`
+- Attendee venue with lobby, main stage, studio, expo, and networking spaces
+- Producer dashboard with room health, run of show, speaker cues, and support queue
+- Rescue Mode simulation for moving a disrupted session to a backup room
+- Expo lead capture persisted to Cloudflare D1, with an optional CRM webhook
+- Secure server-side LiveKit token endpoint; API credentials never reach the browser
+- Responsive, accessible UI and a generated Open Graph social card
 
-## Quick Start
+## Run locally
+
+Requires Node.js 22.13 or newer.
 
 ```bash
 npm install
 npm run dev
+```
+
+The experience runs in demo mode without external credentials. Lead capture still returns a successful demo response; LiveKit reports that configuration is required.
+
+## Connect services
+
+Copy `.env.example` to `.env.local` and provide:
+
+```env
+NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+CRM_WEBHOOK_URL=
+```
+
+`CRM_WEBHOOK_URL` is optional and can point to HubSpot, Salesforce, Zapier, Make, or an internal event-ingestion endpoint. In a hosted environment, bind a D1 database as `DB` and apply the migration in `drizzle/0000_sloppy_vapor.sql`.
+
+## Verification
+
+```bash
 npm run build
+node --test tests/rendered-html.test.mjs
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Suggested next production increments
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+1. Connect the room UI to LiveKit and add device preflight/reconnect handling.
+2. Add producer authentication and role-based permissions.
+3. Persist incidents, audit events, and run-of-show edits to D1.
+4. Add calendar, Slack/Teams, and CRM-specific adapters behind the webhook interface.
+5. Add load, browser, accessibility, and failure-recovery tests.
