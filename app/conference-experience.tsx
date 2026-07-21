@@ -1,6 +1,13 @@
 "use client";
 
 import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  StartAudio,
+  VideoConference,
+} from "@livekit/components-react";
+import "@livekit/components-styles";
+import {
   Activity,
   AlertTriangle,
   ArrowRight,
@@ -41,6 +48,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Role = "attendee" | "producer";
 type RoomId = "stage" | "studio" | "expo" | "lounge";
+type LiveConnection = { token: string; serverUrl: string; roomName: string };
 
 const rooms = [
   {
@@ -137,6 +145,11 @@ export function ConferenceExperience() {
   const [rescueState, setRescueState] = useState<"idle" | "moving" | "complete">("idle");
   const [activeRos, setActiveRos] = useState(2);
   const [events, setEvents] = useState(initialEvents);
+  const [liveDialogOpen, setLiveDialogOpen] = useState(false);
+  const [liveName, setLiveName] = useState("Alex Morgan");
+  const [liveJoining, setLiveJoining] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveConnection, setLiveConnection] = useState<LiveConnection | null>(null);
 
   const activeRoom = useMemo(() => rooms.find((item) => item.id === room) ?? rooms[0], [room]);
 
@@ -199,6 +212,39 @@ export function ConferenceExperience() {
     setNotice("Rescue simulation reset.");
   };
 
+  const openLiveRoom = () => {
+    setLiveError(null);
+    setLiveDialogOpen(true);
+  };
+
+  const connectLiveRoom = async () => {
+    if (!liveName.trim()) {
+      setLiveError("Enter the name you want other attendees to see.");
+      return;
+    }
+    setLiveJoining(true);
+    setLiveError(null);
+    try {
+      const roomName = `global-innovation-${room}`;
+      const response = await fetch("/api/livekit-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identity: liveName.trim(), room: roomName }),
+      });
+      const payload = (await response.json()) as { token?: string; serverUrl?: string; message?: string; error?: string };
+      if (!response.ok || !payload.token || !payload.serverUrl) {
+        throw new Error(payload.message || payload.error || "The live room is temporarily unavailable.");
+      }
+      setLiveConnection({ token: payload.token, serverUrl: payload.serverUrl, roomName });
+      setLiveDialogOpen(false);
+      setNotice("Connected securely to the live room.");
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "The live room is temporarily unavailable.");
+    } finally {
+      setLiveJoining(false);
+    }
+  };
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -231,6 +277,8 @@ export function ConferenceExperience() {
           leadSent={leadSent}
           leadSending={leadSending}
           captureLead={captureLead}
+          openLiveRoom={openLiveRoom}
+          liveConnected={Boolean(liveConnection)}
         />
       ) : (
         <ProducerView
@@ -241,6 +289,28 @@ export function ConferenceExperience() {
           setActiveRos={setActiveRos}
           events={events}
           notify={setNotice}
+        />
+      )}
+
+      {liveDialogOpen && (
+        <LiveJoinDialog
+          name={liveName}
+          setName={setLiveName}
+          roomTitle={activeRoom.title}
+          joining={liveJoining}
+          error={liveError}
+          close={() => setLiveDialogOpen(false)}
+          connect={connectLiveRoom}
+        />
+      )}
+
+      {liveConnection && (
+        <ConnectedLiveRoom
+          connection={liveConnection}
+          roomTitle={activeRoom.title}
+          cameraOn={cameraOn}
+          micOn={micOn}
+          leave={() => setLiveConnection(null)}
         />
       )}
 
@@ -262,6 +332,8 @@ function AttendeeView({
   leadSent,
   leadSending,
   captureLead,
+  openLiveRoom,
+  liveConnected,
 }: {
   room: RoomId;
   activeRoom: (typeof rooms)[number];
@@ -275,6 +347,8 @@ function AttendeeView({
   leadSent: boolean;
   leadSending: boolean;
   captureLead: () => void;
+  openLiveRoom: () => void;
+  liveConnected: boolean;
 }) {
   return (
     <div className="attendee-layout">
@@ -306,7 +380,7 @@ function AttendeeView({
             <h2>Building trust in<br />an AI-first world</h2>
             <p>Maya Chen, Elias Brooks and Sofia Alvarez unpack what responsible innovation looks like when the stakes are real.</p>
             <div className="speaker-row"><AvatarStack /><span>3 speakers · 286 watching</span></div>
-            <button className="primary-button" onClick={() => enterRoom("stage")}>{room === "stage" ? "Return to stage" : "Join main stage"}<ArrowRight size={17} /></button>
+            <button className="primary-button" onClick={() => room === "stage" ? openLiveRoom() : enterRoom("stage")}>{room === "stage" ? "Join live room" : "Join main stage"}<ArrowRight size={17} /></button>
           </div>
           <div className="stage-visual" aria-label="Live speaker preview">
             {people.map((person, index) => (
@@ -352,7 +426,8 @@ function AttendeeView({
             <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>{cameraOn ? <Camera size={18} /> : <CameraOff size={18} />}</button>
             <button onClick={() => setChatOpen(!chatOpen)} aria-label="Toggle chat"><MessageSquareText size={18} /></button>
           </div>
-          <div className="connection-status"><i /> Media ready · Demo mode</div>
+          {room !== "expo" && <button className="join-live-button" onClick={openLiveRoom}><Video size={15} />{liveConnected ? "Reopen live room" : "Connect to live room"}</button>}
+          <div className="connection-status"><i /> {liveConnected ? "LiveKit room connected" : "Secure media preflight ready"}</div>
         </div>
 
         {room === "expo" ? (
@@ -392,6 +467,81 @@ function AttendeeView({
           <div className="chat-input"><input aria-label="Chat message" placeholder="Share a thought…" /><button aria-label="Send message"><Send size={16} /></button></div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LiveJoinDialog({
+  name,
+  setName,
+  roomTitle,
+  joining,
+  error,
+  close,
+  connect,
+}: {
+  name: string;
+  setName: (value: string) => void;
+  roomTitle: string;
+  joining: boolean;
+  error: string | null;
+  close: () => void;
+  connect: () => void;
+}) {
+  return (
+    <div className="live-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <form className="live-dialog" role="dialog" aria-modal="true" aria-labelledby="live-dialog-title" onSubmit={(event) => { event.preventDefault(); connect(); }}>
+        <button className="live-dialog-close" type="button" onClick={close} aria-label="Close live room setup"><X size={19} /></button>
+        <span className="eyebrow"><ShieldCheck size={14} /> SECURE ROOM PRE-FLIGHT</span>
+        <h2 id="live-dialog-title">Join {roomTitle}</h2>
+        <p>Your camera and microphone remain under your control. You can change devices after joining.</p>
+        <label htmlFor="live-display-name">Display name</label>
+        <input id="live-display-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} autoFocus />
+        <div className="preflight-devices">
+          <span><Mic size={16} />Microphone ready</span>
+          <span><Camera size={16} />Camera ready</span>
+        </div>
+        {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Live connection not configured</strong>{error}</span></div>}
+        <button className="primary-button full" type="submit" disabled={joining}>{joining ? "Connecting securely…" : "Enter live room"}<ArrowRight size={16} /></button>
+        <button className="live-demo-link" type="button" onClick={close}>Continue exploring the interactive demo</button>
+      </form>
+    </div>
+  );
+}
+
+function ConnectedLiveRoom({
+  connection,
+  roomTitle,
+  cameraOn,
+  micOn,
+  leave,
+}: {
+  connection: LiveConnection;
+  roomTitle: string;
+  cameraOn: boolean;
+  micOn: boolean;
+  leave: () => void;
+}) {
+  return (
+    <div className="live-room-overlay" role="dialog" aria-modal="true" aria-label={`${roomTitle} live room`}>
+      <LiveKitRoom
+        className="live-room-shell"
+        token={connection.token}
+        serverUrl={connection.serverUrl}
+        connect
+        video={cameraOn}
+        audio={micOn}
+        onDisconnected={leave}
+        data-lk-theme="default"
+      >
+        <header className="live-room-header">
+          <div><StatusPill>LIVE</StatusPill><span>{roomTitle}</span><small>{connection.roomName}</small></div>
+          <button onClick={leave}><X size={18} />Leave room</button>
+        </header>
+        <div className="live-room-conference"><VideoConference /></div>
+        <RoomAudioRenderer />
+        <StartAudio label="Enable room audio" />
+      </LiveKitRoom>
     </div>
   );
 }

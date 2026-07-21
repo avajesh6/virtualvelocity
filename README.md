@@ -8,7 +8,7 @@ A working product concept for Virtual Velocity: a branded virtual-event venue fo
 - Producer dashboard with room health, run of show, speaker cues, and support queue
 - Rescue Mode simulation for moving a disrupted session to a backup room
 - Expo lead capture persisted to Cloudflare D1, with an optional CRM webhook
-- Secure server-side LiveKit token endpoint; API credentials never reach the browser
+- Secure server-side LiveKit token endpoint and a real LiveKit conference room with device controls, screen sharing, chat, and reconnection handling; API credentials never reach the browser
 - Responsive, accessible UI and a generated Open Graph social card
 
 ## Run locally
@@ -44,8 +44,8 @@ node --test tests/rendered-html.test.mjs
 
 ## Suggested next production increments
 
-1. Connect the room UI to LiveKit and add device preflight/reconnect handling.
-2. Add producer authentication and role-based permissions.
+1. Add producer authentication and role-based publish permissions.
+2. Bind producer controls to LiveKit room administration APIs.
 3. Persist incidents, audit events, and run-of-show edits to D1.
 4. Add calendar, Slack/Teams, and CRM-specific adapters behind the webhook interface.
 5. Add load, browser, accessibility, and failure-recovery tests.

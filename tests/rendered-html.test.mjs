@@ -15,6 +15,8 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(experience, /ProducerView/);
   assert.match(experience, /Rescue Mode/);
   assert.match(experience, /api\/leads/);
+  assert.match(experience, /LiveKitRoom/);
+  assert.match(experience, /VideoConference/);
   assert.match(layout, /og\.png/);
   assert.doesNotMatch(`${page}${layout}`, /codex-preview|SkeletonPreview/);
 });
@@ -27,6 +29,8 @@ test("keeps third-party credentials server-side", async () => {
   ]);
   assert.doesNotMatch(client, /LIVEKIT_API_SECRET|CRM_WEBHOOK_URL/);
   assert.match(tokenRoute, /LIVEKIT_API_SECRET/);
+  assert.match(tokenRoute, /cache-control/);
+  assert.match(tokenRoute, /global-innovation-/);
   assert.match(envExample, /LIVEKIT_API_KEY=/);
   assert.match(envExample, /CRM_WEBHOOK_URL=/);
 });
