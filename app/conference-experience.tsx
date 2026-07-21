@@ -49,6 +49,8 @@ import { useEffect, useMemo, useState } from "react";
 type Role = "attendee" | "producer";
 type RoomId = "stage" | "studio" | "expo" | "lounge";
 type LiveConnection = { token: string; serverUrl: string; roomName: string };
+type ProducerUser = { displayName: string; email: string };
+type ManagedParticipant = { identity: string; name: string; audioTrackSid: string | null; audioMuted: boolean };
 
 const rooms = [
   {
@@ -133,7 +135,15 @@ function StatusPill({ children, tone = "live" }: { children: React.ReactNode; to
   return <span className={`status-pill ${tone}`}><i />{children}</span>;
 }
 
-export function ConferenceExperience() {
+export function ConferenceExperience({
+  producerUser,
+  producerSignInPath,
+  producerSignOutPath,
+}: {
+  producerUser: ProducerUser | null;
+  producerSignInPath: string;
+  producerSignOutPath: string;
+}) {
   const [role, setRole] = useState<Role>("attendee");
   const [room, setRoom] = useState<RoomId>("stage");
   const [micOn, setMicOn] = useState(true);
@@ -158,6 +168,12 @@ export function ConferenceExperience() {
     const timer = window.setTimeout(() => setNotice(null), 3200);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (producerUser && new URLSearchParams(window.location.search).get("role") === "producer") {
+      setRole("producer");
+    }
+  }, [producerUser]);
 
   const enterRoom = (next: RoomId) => {
     setRoom(next);
@@ -189,21 +205,37 @@ export function ConferenceExperience() {
     }
   };
 
-  const triggerRescue = () => {
+  const triggerRescue = async () => {
     if (rescueState !== "idle") return;
     setRescueState("moving");
     setEvents((current) => [
       { time: "11:27:02", text: "Rescue Mode activated by Cris", tone: "warn" },
       ...current,
     ]);
+    let moved = 286;
+    let liveRecovery = false;
+    try {
+      const response = await fetch("/api/producer/room", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "rescue", room: "global-innovation-stage" }),
+      });
+      const payload = (await response.json()) as { moved?: number };
+      if (response.ok) {
+        moved = payload.moved ?? 0;
+        liveRecovery = true;
+      }
+    } catch {
+      // The visual recovery remains available as a clearly labelled demo fallback.
+    }
     window.setTimeout(() => {
       setRescueState("complete");
       setEvents((current) => [
-        { time: "11:27:09", text: "286 attendees moved to Main Stage Backup", tone: "good" },
+        { time: "11:27:09", text: liveRecovery ? `${moved} live participants moved to Main Stage Backup` : "Demo recovery completed for 286 attendees", tone: "good" },
         ...current,
       ]);
-      setNotice("Recovery complete · audience reconnected in 7 seconds.");
-    }, 1700);
+      setNotice(liveRecovery ? `Live recovery complete · ${moved} participants moved.` : "Demo recovery complete · connect LiveKit to move real participants.");
+    }, liveRecovery ? 500 : 1700);
   };
 
   const resetDemo = () => {
@@ -256,10 +288,10 @@ export function ConferenceExperience() {
         <div className="top-actions">
           <div className="role-switch" aria-label="Switch demo role">
             <button className={role === "attendee" ? "active" : ""} onClick={() => setRole("attendee")}>Attendee</button>
-            <button className={role === "producer" ? "active" : ""} onClick={() => setRole("producer")}>Producer</button>
+            <button className={role === "producer" ? "active" : ""} onClick={() => producerUser ? setRole("producer") : window.location.assign(producerSignInPath)}>{producerUser ? "Producer" : "Producer sign in"}</button>
           </div>
           <button className="icon-button" aria-label="Notifications"><Bell size={18} /><span className="notification-dot" /></button>
-          <button className="profile-button" aria-label="Open profile">AM</button>
+          {producerUser && role === "producer" ? <a className="profile-button" href={producerSignOutPath} aria-label="Sign out of producer mode" title={`Signed in as ${producerUser.email}`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</a> : <button className="profile-button" aria-label="Open profile">AM</button>}
         </div>
       </header>
 
@@ -289,6 +321,7 @@ export function ConferenceExperience() {
           setActiveRos={setActiveRos}
           events={events}
           notify={setNotice}
+          producerUser={producerUser!}
         />
       )}
 
@@ -554,6 +587,7 @@ function ProducerView({
   setActiveRos,
   events,
   notify,
+  producerUser,
 }: {
   rescueState: "idle" | "moving" | "complete";
   triggerRescue: () => void;
@@ -562,7 +596,46 @@ function ProducerView({
   setActiveRos: (index: number) => void;
   events: { time: string; text: string; tone: string }[];
   notify: (message: string) => void;
+  producerUser: ProducerUser;
 }) {
+  const [managedParticipants, setManagedParticipants] = useState<ManagedParticipant[]>([]);
+  const [participantStatus, setParticipantStatus] = useState<"loading" | "ready" | "demo" | "error">("loading");
+
+  const refreshParticipants = async () => {
+    setParticipantStatus("loading");
+    try {
+      const response = await fetch("/api/producer/room?room=global-innovation-stage", { cache: "no-store" });
+      const payload = (await response.json()) as { participants?: ManagedParticipant[] };
+      if (!response.ok) {
+        setManagedParticipants([]);
+        setParticipantStatus(response.status === 503 ? "demo" : "error");
+        return;
+      }
+      setManagedParticipants(payload.participants ?? []);
+      setParticipantStatus("ready");
+    } catch {
+      setParticipantStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    void refreshParticipants();
+  }, []);
+
+  const manageParticipant = async (action: "remove" | "mute", participant: ManagedParticipant) => {
+    const response = await fetch("/api/producer/room", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, room: "global-innovation-stage", identity: participant.identity, trackSid: participant.audioTrackSid }),
+    });
+    if (!response.ok) {
+      notify("The producer action could not be completed.");
+      return;
+    }
+    notify(action === "remove" ? `${participant.name} was removed from the live room.` : `${participant.name} was muted.`);
+    await refreshParticipants();
+  };
+
   return (
     <div className="producer-layout">
       <aside className="producer-nav">
@@ -580,7 +653,7 @@ function ProducerView({
 
       <section className="command-content">
         <div className="command-heading">
-          <div><span className="eyebrow"><Radio size={13} /> SHOW IS LIVE</span><h1>Good morning, Cris.</h1><p>You’re 24 minutes into the program. Everything is on time.</p></div>
+          <div><span className="eyebrow"><Radio size={13} /> SHOW IS LIVE · SIGNED IN</span><h1>Good morning, {producerUser.displayName.split(" ")[0]}.</h1><p>You’re 24 minutes into the program. Everything is on time.</p></div>
           <div className="command-actions"><button className="secondary-button" onClick={() => notify("Announcement sent to all attendees.")}><Bell size={16} />Send announcement</button><button className="primary-button"><ExternalLink size={15} />Open attendee view</button></div>
         </div>
 
@@ -618,6 +691,21 @@ function ProducerView({
               <div className="health-room-head"><span className="health-icon coral"><Radio size={16} /></span><div><strong>Main Stage</strong><small>Live · 286 attendees</small></div><StatusPill tone="healthy">Healthy</StatusPill></div>
               <div className="health-stats"><span><i className="green" />Media <strong>Excellent</strong></span><span>Latency <strong>112 ms</strong></span><span>Speakers <strong>3 / 3</strong></span></div>
               <div className="health-actions"><button onClick={() => notify("Main Stage monitor opened.")}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={triggerRescue} disabled={rescueState !== "idle"}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
+              <div className="live-participants">
+                <div><strong>LIVEKIT PARTICIPANTS</strong><button onClick={refreshParticipants}>Refresh</button></div>
+                {participantStatus === "loading" && <p>Checking the live room…</p>}
+                {participantStatus === "demo" && <p>Demo data shown until LiveKit credentials are connected.</p>}
+                {participantStatus === "error" && <p>Live participant status is temporarily unavailable.</p>}
+                {participantStatus === "ready" && managedParticipants.length === 0 && <p>The live room is ready and currently empty.</p>}
+                {managedParticipants.slice(0, 4).map((participant) => (
+                  <div className="managed-participant" key={participant.identity}>
+                    <span className="mini-avatar cyan">{participant.name.slice(0, 2).toUpperCase()}</span>
+                    <span><strong>{participant.name}</strong><small>{participant.audioTrackSid ? participant.audioMuted ? "Audio muted" : "Audio live" : "No audio track"}</small></span>
+                    <button onClick={() => manageParticipant("mute", participant)} disabled={!participant.audioTrackSid || participant.audioMuted}>Mute</button>
+                    <button className="remove" onClick={() => manageParticipant("remove", participant)}>Remove</button>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="health-room compact-room"><span className="health-icon violet"><MonitorUp size={16} /></span><div><strong>Studio One</strong><small>Green room · 5 speakers</small></div><span className="ready-state"><i />Ready</span></div>
             <div className="health-room compact-room"><span className="health-icon lime"><Store size={16} /></span><div><strong>Partner Expo</strong><small>12 booths · 61 attendees</small></div><span className="ready-state"><i />Open</span></div>

@@ -22,9 +22,10 @@ test("ships the two-sided Velocity Venue experience", async () => {
 });
 
 test("keeps third-party credentials server-side", async () => {
-  const [client, tokenRoute, envExample] = await Promise.all([
+  const [client, tokenRoute, producerRoute, envExample] = await Promise.all([
     readFile(new URL("app/conference-experience.tsx", root), "utf8"),
     readFile(new URL("app/api/livekit-token/route.ts", root), "utf8"),
+    readFile(new URL("app/api/producer/room/route.ts", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
   assert.doesNotMatch(client, /LIVEKIT_API_SECRET|CRM_WEBHOOK_URL/);
@@ -33,6 +34,10 @@ test("keeps third-party credentials server-side", async () => {
   assert.match(tokenRoute, /global-innovation-/);
   assert.match(envExample, /LIVEKIT_API_KEY=/);
   assert.match(envExample, /CRM_WEBHOOK_URL=/);
+  assert.match(producerRoute, /getChatGPTUser/);
+  assert.match(producerRoute, /moveParticipant/);
+  assert.match(producerRoute, /mutePublishedTrack/);
+  assert.match(envExample, /PRODUCER_EMAILS=/);
 });
 
 test("defines durable lead and incident records", async () => {

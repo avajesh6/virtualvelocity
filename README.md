@@ -31,9 +31,12 @@ NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
 CRM_WEBHOOK_URL=
+PRODUCER_EMAILS=producer@example.com
 ```
 
 `CRM_WEBHOOK_URL` is optional and can point to HubSpot, Salesforce, Zapier, Make, or an internal event-ingestion endpoint. In a hosted environment, bind a D1 database as `DB` and apply the migration in `drizzle/0000_sloppy_vapor.sql`.
+
+Producer mode uses platform-managed ChatGPT sign-in. `PRODUCER_EMAILS` is an optional comma-separated allowlist; when it is blank, any signed-in viewer who already has access to the private site can use producer mode.
 
 ## Verification
 
