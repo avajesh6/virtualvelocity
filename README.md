@@ -65,3 +65,4 @@ The live HTTP suite checks failure handling and a 25-request concurrent smoke lo
 
 1. Configure and smoke-test the production Supabase, LiveKit, D1, calendar, messaging, and CRM credentials.
 2. Run representative load, cross-browser, screen-reader, and provider failure drills in the production environment.
+3. TODO (final): connect the preferred custom domain after the Worker-hosted test submission is accepted.
