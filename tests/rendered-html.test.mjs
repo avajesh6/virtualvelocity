@@ -22,6 +22,12 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(experience, /useParticipants/);
   assert.match(experience, /velocity-theme/);
   assert.match(experience, /Conference invite copied/);
+  assert.match(experience, /Notifications marked as read/);
+  assert.match(experience, /Connection request sent to Noor Patel/);
+  assert.match(experience, /sendChatMessage/);
+  assert.match(experience, /producer-run-show/);
+  assert.match(experience, /Refresh room monitor/);
+  assert.match(experience, /View full log/);
   assert.match(experience, /signInWithOAuth/);
   assert.match(experience, /Continue with Google/);
   assert.match(layout, /og\.png/);

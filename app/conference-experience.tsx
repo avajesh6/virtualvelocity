@@ -185,6 +185,8 @@ export function ConferenceExperience() {
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsUnread, setNotificationsUnread] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [leadSent, setLeadSent] = useState(false);
   const [leadSending, setLeadSending] = useState(false);
@@ -232,6 +234,18 @@ export function ConferenceExperience() {
     const timer = window.setTimeout(() => setNotice(null), 3200);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    const closeTransientPanels = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setNotificationsOpen(false);
+      setChatOpen(false);
+      setAuthDialogOpen(false);
+      setLiveDialogOpen(false);
+    };
+    window.addEventListener("keydown", closeTransientPanels);
+    return () => window.removeEventListener("keydown", closeTransientPanels);
+  }, []);
 
   useEffect(() => {
     // Supabase owns browser session refresh. This effect mirrors only the
@@ -512,7 +526,7 @@ export function ConferenceExperience() {
           <small>LIVE · JUL 31</small>
         </div>
         <div className="top-actions">
-          <div className="role-switch" aria-label="Switch demo role">
+          <div className="role-switch" aria-label="Switch app role">
             <button className={role === "attendee" ? "active" : ""} onClick={() => setRole("attendee")}>Attendee</button>
             <button className={role === "producer" ? "active" : ""} onClick={openProducer} disabled={!authReady}>{producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
           </div>
@@ -525,7 +539,28 @@ export function ConferenceExperience() {
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          <button className="icon-button" aria-label="Notifications"><Bell size={18} /><span className="notification-dot" /></button>
+          <div className="notification-control">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Notifications"
+              aria-expanded={notificationsOpen}
+              aria-controls="notification-menu"
+              onClick={() => setNotificationsOpen((open) => !open)}
+            >
+              <Bell size={18} />
+              {notificationsUnread && <span className="notification-dot" />}
+            </button>
+            {notificationsOpen && (
+              <section className="notification-menu" id="notification-menu" aria-label="Recent notifications">
+                <div><strong>Notifications</strong><span>3 recent</span></div>
+                <button type="button" onClick={() => { setNotificationsOpen(false); setNotice("Main Stage is live and healthy."); }}><Radio size={15} /><span><strong>Main Stage is live</strong><small>All speakers connected · now</small></span></button>
+                <button type="button" onClick={() => { setNotificationsOpen(false); setNotice("Studio One device check opens at 11:25."); }}><Video size={15} /><span><strong>Studio One opens soon</strong><small>Device check at 11:25</small></span></button>
+                <button type="button" onClick={() => { setNotificationsOpen(false); enterRoom("expo"); }}><Store size={15} /><span><strong>Partner expo is open</strong><small>12 booths available</small></span></button>
+                <button className="notification-clear" type="button" onClick={() => { setNotificationsUnread(false); setNotificationsOpen(false); setNotice("Notifications marked as read."); }}>Mark all as read</button>
+              </section>
+            )}
+          </div>
           {producerUser ? <button className="profile-button" onClick={signOut} aria-label="Sign out" title={`Signed in as ${producerUser.email}. Click to sign out.`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</button> : <button className="profile-button" onClick={() => setAuthDialogOpen(true)} aria-label="Sign in">AM</button>}
         </div>
       </header>
@@ -546,6 +581,7 @@ export function ConferenceExperience() {
           captureLead={captureLead}
           openLiveRoom={openLiveRoom}
           liveConnected={Boolean(liveConnection)}
+          notify={setNotice}
         />
       ) : (
         <ProducerView
@@ -579,6 +615,8 @@ export function ConferenceExperience() {
           roomTitle={activeRoom.title}
           roomDescription={activeRoom.description}
           attendeeCount={activeRoom.count}
+          audioEnabled={micOn}
+          videoEnabled={cameraOn}
           joining={liveJoining}
           error={liveError}
           close={() => setLiveDialogOpen(false)}
@@ -617,6 +655,7 @@ function AttendeeView({
   captureLead,
   openLiveRoom,
   liveConnected,
+  notify,
 }: {
   room: RoomId;
   activeRoom: (typeof rooms)[number];
@@ -632,14 +671,25 @@ function AttendeeView({
   captureLead: () => void;
   openLiveRoom: (room?: RoomId) => void;
   liveConnected: boolean;
+  notify: (message: string) => void;
 }) {
+  const [chatDraft, setChatDraft] = useState("");
+  const [sentMessages, setSentMessages] = useState<string[]>([]);
+
+  const sendChatMessage = () => {
+    const message = chatDraft.trim();
+    if (!message) return;
+    setSentMessages((current) => [...current, message]);
+    setChatDraft("");
+  };
+
   return (
     <div className="attendee-layout">
       <aside className="side-nav">
         <div>
-          <button className="nav-item active"><Map size={20} /><span>Venue</span></button>
+          <button className="nav-item active" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><Map size={20} /><span>Venue</span></button>
           <button className="nav-item" onClick={() => document.getElementById("rooms")?.scrollIntoView({ behavior: "smooth" })}><CalendarDays size={20} /><span>Agenda</span></button>
-          <button className="nav-item" onClick={() => setChatOpen(true)}><Users size={20} /><span>People</span></button>
+          <button className="nav-item" onClick={() => setChatOpen(true)}><MessageSquareText size={20} /><span>Chat</span></button>
           <button className="nav-item" onClick={() => enterRoom("expo")}><Store size={20} /><span>Expo</span></button>
         </div>
         <div>
@@ -679,7 +729,7 @@ function AttendeeView({
 
         <div className="section-heading">
           <div><span className="eyebrow">EXPLORE THE VENUE</span><h3>Where do you want to go?</h3></div>
-          <button className="text-button">View full agenda <ChevronRight size={16} /></button>
+          <button className="text-button" onClick={() => document.getElementById("rooms")?.scrollIntoView({ behavior: "smooth" })}>View full agenda <ChevronRight size={16} /></button>
         </div>
 
         <div className="conference-capability-strip" aria-label="Conference capabilities">
@@ -730,7 +780,7 @@ function AttendeeView({
             <div className="lumen-logo">LU<span>MEN</span></div>
             <h3>Make responsible AI operational.</h3>
             <p>Take the field guide used by product leaders across regulated industries.</p>
-            <button className="secondary-button"><Download size={16} />Download guide</button>
+            <button className="secondary-button" onClick={() => window.location.assign("/docs#capabilities")}><Download size={16} />Open venue guide</button>
             <button className={`primary-button full ${leadSent ? "success" : ""}`} onClick={captureLead} disabled={leadSending || leadSent}>{leadSent ? <><Check size={16} />Interest captured</> : leadSending ? "Routing…" : <>I’m interested <ExternalLink size={15} /></>}</button>
           </div>
         ) : (
@@ -739,12 +789,12 @@ function AttendeeView({
               <div className="rail-title"><span>UP NEXT</span><Clock3 size={16} /></div>
               <strong>11:35 · Studio One</strong>
               <h4>The human side of transformation</h4>
-              <button className="text-button" onClick={() => enterRoom("studio")}>Save my seat <ChevronRight size={15} /></button>
+              <button className="text-button" onClick={() => { enterRoom("studio"); notify("Seat saved for Studio One at 11:35."); }}>Save my seat <ChevronRight size={15} /></button>
             </div>
             <div className="rail-block">
               <div className="rail-title"><span>PEOPLE TO MEET</span><WandSparkles size={16} /></div>
-              <div className="match-person"><span className="mini-avatar violet">NP</span><div><strong>Noor Patel</strong><small>3 shared interests</small></div><button aria-label="Connect with Noor"><Send size={15} /></button></div>
-              <div className="match-person"><span className="mini-avatar coral">JW</span><div><strong>Jonas Weber</strong><small>Also in responsible AI</small></div><button aria-label="Connect with Jonas"><Send size={15} /></button></div>
+              <div className="match-person"><span className="mini-avatar violet">NP</span><div><strong>Noor Patel</strong><small>3 shared interests</small></div><button aria-label="Connect with Noor" onClick={() => notify("Connection request sent to Noor Patel.")}><Send size={15} /></button></div>
+              <div className="match-person"><span className="mini-avatar coral">JW</span><div><strong>Jonas Weber</strong><small>Also in responsible AI</small></div><button aria-label="Connect with Jonas" onClick={() => notify("Connection request sent to Jonas Weber.")}><Send size={15} /></button></div>
             </div>
           </>
         )}
@@ -757,8 +807,12 @@ function AttendeeView({
             <p><strong>Priya</strong> The governance point is so important.</p>
             <p><strong>Daniel</strong> Would love the framework Sofia mentioned.</p>
             <p className="producer-message"><strong>Producer</strong> Drop your questions below—we’ll bring three to the stage.</p>
+            {sentMessages.map((message, index) => <p key={`${message}-${index}`}><strong>You</strong>{message}</p>)}
           </div>
-          <div className="chat-input"><input aria-label="Chat message" placeholder="Share a thought…" /><button aria-label="Send message"><Send size={16} /></button></div>
+          <form className="chat-input" onSubmit={(event) => { event.preventDefault(); sendChatMessage(); }}>
+            <input aria-label="Chat message" placeholder="Share a thought…" value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} />
+            <button type="submit" aria-label="Send message" disabled={!chatDraft.trim()}><Send size={16} /></button>
+          </form>
         </div>
       )}
     </div>
@@ -813,6 +867,8 @@ function LiveJoinDialog({
   roomTitle,
   roomDescription,
   attendeeCount,
+  audioEnabled,
+  videoEnabled,
   joining,
   error,
   close,
@@ -821,6 +877,8 @@ function LiveJoinDialog({
   roomTitle: string;
   roomDescription: string;
   attendeeCount: number;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
   joining: boolean;
   error: string | null;
   close: () => void;
@@ -842,7 +900,7 @@ function LiveJoinDialog({
         </div>
         <PreJoin
           className="velocity-prejoin"
-          defaults={{ username: "Alex Morgan", videoEnabled: true, audioEnabled: true }}
+          defaults={{ username: "Alex Morgan", videoEnabled, audioEnabled }}
           joinLabel={joining ? "Connecting securely…" : "Join conference"}
           micLabel="Microphone"
           camLabel="Camera"
@@ -853,7 +911,7 @@ function LiveJoinDialog({
           onError={(joinError) => console.warn("Media preview unavailable", joinError)}
         />
         {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Unable to join this room</strong>{error}</span></div>}
-        <button className="live-demo-link" type="button" onClick={close}>Continue exploring the interactive demo</button>
+        <button className="live-demo-link" type="button" onClick={close}>Continue exploring the venue</button>
       </section>
     </div>
   );
@@ -960,6 +1018,14 @@ function ProducerView({
     runOfShow.map((item) => ({ ...item, scheduledTime: item.time })),
   );
   const [persistentEvents, setPersistentEvents] = useState<OperationalEvent[]>([]);
+  const [producerSection, setProducerSection] = useState("overview");
+  const [showFullLog, setShowFullLog] = useState(false);
+  const [integrationBusy, setIntegrationBusy] = useState<"announcement" | "calendar" | null>(null);
+
+  const openProducerSection = (section: string, targetId: string) => {
+    setProducerSection(section);
+    document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const refreshOperations = async () => {
     try {
@@ -1024,95 +1090,126 @@ function ProducerView({
       notify("Run of show advanced in demo mode.");
       return;
     }
-    const response = await fetch("/api/producer/operations", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ action: "set-run-status", itemId: item.id, status: "live" }),
-    });
-    notify(response.ok ? "Run-of-show change saved." : "Run-of-show change is visible but could not be saved.");
-    if (response.ok) await refreshOperations();
+    try {
+      const response = await fetch("/api/producer/operations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ action: "set-run-status", itemId: item.id, status: "live" }),
+      });
+      notify(response.ok ? "Run-of-show change saved." : "Run-of-show change is visible but could not be saved.");
+      if (response.ok) await refreshOperations();
+    } catch {
+      notify("Run-of-show change is visible but could not be saved.");
+    }
   };
 
   const sendIntegration = async (channel: "calendar" | "slack" | "teams", message: string) => {
     // Integration URLs remain server-side. The client receives only delivery
     // classification suitable for a producer-facing status message.
-    const response = await fetch("/api/producer/integrations", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        channel,
-        message,
-        roomName: "Main Stage",
-        startsAt: "2026-07-31T11:00:00Z",
-        endsAt: "2026-07-31T12:00:00Z",
-      }),
-    });
-    const payload = await response.json() as { configured?: boolean };
-    notify(
-      response.ok
-        ? `${channel === "calendar" ? "Calendar" : channel === "slack" ? "Slack" : "Teams"} update delivered.`
-        : payload.configured === false
-          ? `${channel === "calendar" ? "Calendar" : channel === "slack" ? "Slack" : "Teams"} is ready to connect in environment settings.`
-          : "The integration could not be reached.",
-    );
-    await refreshOperations();
+    try {
+      const response = await fetch("/api/producer/integrations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          channel,
+          message,
+          roomName: "Main Stage",
+          startsAt: "2026-07-31T11:00:00Z",
+          endsAt: "2026-07-31T12:00:00Z",
+        }),
+      });
+      const payload = await response.json() as { configured?: boolean };
+      notify(
+        response.ok
+          ? `${channel === "calendar" ? "Calendar" : channel === "slack" ? "Slack" : "Teams"} update delivered.`
+          : payload.configured === false
+            ? `${channel === "calendar" ? "Calendar" : channel === "slack" ? "Slack" : "Teams"} is ready to connect in environment settings.`
+            : "The integration could not be reached.",
+      );
+      await refreshOperations();
+      return response.ok;
+    } catch {
+      notify("The integration could not be reached.");
+      return false;
+    }
+  };
+
+  const sendAnnouncement = async () => {
+    setIntegrationBusy("announcement");
+    const message = "Global Innovation Summit: producer announcement from Main Stage.";
+    const results = await Promise.all([
+      sendIntegration("slack", message),
+      sendIntegration("teams", message),
+    ]);
+    if (results.every(Boolean)) notify("Announcement delivered to Slack and Teams.");
+    setIntegrationBusy(null);
+  };
+
+  const syncCalendar = async () => {
+    setIntegrationBusy("calendar");
+    await sendIntegration("calendar", "Global Innovation Summit — Main Stage");
+    setIntegrationBusy(null);
   };
 
   const manageParticipant = async (action: "remove" | "mute", participant: ManagedParticipant) => {
     // Participant identity and audio track SID come from the latest server
     // snapshot, reducing the chance of acting on stale LiveKit state.
-    const response = await fetch("/api/producer/room", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ action, room: "global-innovation-stage", identity: participant.identity, trackSid: participant.audioTrackSid }),
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/producer/room", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ action, room: "global-innovation-stage", identity: participant.identity, trackSid: participant.audioTrackSid }),
+      });
+      if (!response.ok) {
+        notify("The producer action could not be completed.");
+        return;
+      }
+      notify(action === "remove" ? `${participant.name} was removed from the live room.` : `${participant.name} was muted.`);
+      await refreshParticipants();
+    } catch {
       notify("The producer action could not be completed.");
-      return;
     }
-    notify(action === "remove" ? `${participant.name} was removed from the live room.` : `${participant.name} was muted.`);
-    await refreshParticipants();
   };
 
   return (
     <div className="producer-layout">
       <aside className="producer-nav">
         <div className="producer-label">PRODUCER MODE</div>
-        <button className="producer-nav-item active"><LayoutDashboard size={18} />Show overview</button>
-        <button className="producer-nav-item"><TimerReset size={18} />Run of show</button>
-        <button className="producer-nav-item"><Video size={18} />Rooms & stages</button>
-        <button className="producer-nav-item"><Users size={18} />Speakers</button>
-        <button className="producer-nav-item"><MessageSquareText size={18} />Engagement</button>
-        <button className="producer-nav-item"><Gauge size={18} />Event data</button>
+        <button className={`producer-nav-item ${producerSection === "overview" ? "active" : ""}`} onClick={() => openProducerSection("overview", "producer-overview")}><LayoutDashboard size={18} />Show overview</button>
+        <button className={`producer-nav-item ${producerSection === "run" ? "active" : ""}`} onClick={() => openProducerSection("run", "producer-run-show")}><TimerReset size={18} />Run of show</button>
+        <button className={`producer-nav-item ${producerSection === "rooms" ? "active" : ""}`} onClick={() => openProducerSection("rooms", "producer-rooms")}><Video size={18} />Rooms & stages</button>
+        <button className={`producer-nav-item ${producerSection === "speakers" ? "active" : ""}`} onClick={() => openProducerSection("speakers", "producer-participants")}><Users size={18} />Speakers</button>
+        <button className={`producer-nav-item ${producerSection === "engagement" ? "active" : ""}`} onClick={() => openProducerSection("engagement", "producer-activity")}><MessageSquareText size={18} />Engagement</button>
+        <button className={`producer-nav-item ${producerSection === "data" ? "active" : ""}`} onClick={() => openProducerSection("data", "producer-metrics")}><Gauge size={18} />Event data</button>
         <div className="nav-divider" />
-        <button className="producer-nav-item"><LifeBuoy size={18} />Support queue <span>2</span></button>
+        <button className={`producer-nav-item ${producerSection === "support" ? "active" : ""}`} onClick={() => openProducerSection("support", "producer-support")}><LifeBuoy size={18} />Support queue <span>2</span></button>
         <div className="event-health"><div><HeartPulse size={17} /><span>EVENT HEALTH</span></div><strong>99.8%</strong><small>All critical systems normal</small></div>
       </aside>
 
       <section className="command-content">
-        <div className="command-heading">
+        <div className="command-heading scroll-target" id="producer-overview">
           <div><span className="eyebrow"><Radio size={13} /> SHOW IS LIVE · SIGNED IN</span><h1>Good morning, {producerUser.displayName.split(" ")[0]}.</h1><p>You’re 24 minutes into the program. Everything is on time.</p></div>
-          <div className="command-actions"><button className="secondary-button" onClick={() => void Promise.all([sendIntegration("slack", "Global Innovation Summit: producer announcement from Main Stage."), sendIntegration("teams", "Global Innovation Summit: producer announcement from Main Stage.")])}><Bell size={16} />Send announcement</button><button className="secondary-button" onClick={() => void sendIntegration("calendar", "Global Innovation Summit — Main Stage")}><CalendarDays size={15} />Sync calendar</button><button className="primary-button" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink size={15} />Open attendee view</button></div>
+          <div className="command-actions"><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void sendAnnouncement()}><Bell size={16} />{integrationBusy === "announcement" ? "Sending…" : "Send announcement"}</button><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void syncCalendar()}><CalendarDays size={15} />{integrationBusy === "calendar" ? "Syncing…" : "Sync calendar"}</button><button className="primary-button" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink size={15} />Open attendee view</button></div>
         </div>
 
         {rescueState !== "idle" && (
           <div className={`rescue-banner ${rescueState}`}>
             <div className="rescue-symbol">{rescueState === "moving" ? <Zap size={24} /> : <ShieldCheck size={24} />}</div>
             <div><span>{rescueState === "moving" ? "RESCUE MODE ACTIVE" : "RECOVERY COMPLETE"}</span><strong>{rescueState === "moving" ? "Moving the audience to Main Stage Backup…" : "286 attendees reconnected in 7 seconds"}</strong><small>{rescueState === "moving" ? "Conference state is preserved. No attendee action required." : "Chat, agenda and engagement history remained available."}</small></div>
-            {rescueState === "complete" && <button onClick={resetDemo}>Reset demo</button>}
+            {rescueState === "complete" && <button onClick={resetDemo}>Reset recovery</button>}
           </div>
         )}
 
-        <div className="metric-grid">
+        <div className="metric-grid scroll-target" id="producer-metrics">
           <MetricCard label="ATTENDEES ONLINE" value="431" change="+38 in 10 min" icon={Users} tone="cyan" />
           <MetricCard label="ACTIVE ROOMS" value="4 / 6" change="2 scheduled later" icon={Radio} tone="violet" />
           <MetricCard label="OPEN SUPPORT" value="2" change="Median reply 0:42" icon={LifeBuoy} tone="coral" />
@@ -1120,7 +1217,7 @@ function ProducerView({
         </div>
 
         <div className="command-grid">
-          <section className="panel run-panel">
+          <section className="panel run-panel scroll-target" id="producer-run-show">
             <div className="panel-head"><div><span className="eyebrow">LIVE CONTROL</span><h2>Run of show</h2></div><span className="on-time"><Check size={13} />ON TIME</span></div>
             <div className="ros-list">
               {persistentRunOfShow.map((item, index) => (
@@ -1132,13 +1229,13 @@ function ProducerView({
             <div className="cue-actions"><span>Quick cue</span><button onClick={() => notify("“Stand by” sent privately to the next speaker.")}>Stand by</button><button onClick={() => notify("“2 minutes” sent privately to all active speakers.")}>2 minutes</button><button onClick={() => notify("“Wrap up” sent privately to the active speaker.")}>Wrap up</button></div>
           </section>
 
-          <section className="panel room-health-panel">
-            <div className="panel-head"><div><span className="eyebrow">ROOM MONITOR</span><h2>Live spaces</h2></div><button className="icon-button"><MoreHorizontal size={18} /></button></div>
+          <section className="panel room-health-panel scroll-target" id="producer-rooms">
+            <div className="panel-head"><div><span className="eyebrow">ROOM MONITOR</span><h2>Live spaces</h2></div><button className="icon-button" aria-label="Refresh room monitor" onClick={() => void refreshParticipants()}><TimerReset size={18} /></button></div>
             <div className="health-room">
               <div className="health-room-head"><span className="health-icon coral"><Radio size={16} /></span><div><strong>Main Stage</strong><small>Live · 286 attendees</small></div><StatusPill tone="healthy">Healthy</StatusPill></div>
               <div className="health-stats"><span><i className="green" />Media <strong>Excellent</strong></span><span>Latency <strong>112 ms</strong></span><span>Speakers <strong>3 / 3</strong></span></div>
-              <div className="health-actions"><button onClick={() => notify("Main Stage monitor opened.")}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={triggerRescue} disabled={rescueState !== "idle"}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
-              <div className="live-participants">
+              <div className="health-actions"><button onClick={() => { void refreshParticipants(); openProducerSection("speakers", "producer-participants"); }}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={triggerRescue} disabled={rescueState !== "idle"}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
+              <div className="live-participants scroll-target" id="producer-participants">
                 <div><strong>LIVEKIT PARTICIPANTS</strong><button onClick={refreshParticipants}>Refresh</button></div>
                 {participantStatus === "loading" && <p>Checking the live room…</p>}
                 {participantStatus === "demo" && <p>Demo data shown until LiveKit credentials are connected.</p>}
@@ -1161,15 +1258,15 @@ function ProducerView({
         </div>
 
         <div className="bottom-grid">
-          <section className="panel activity-panel">
-            <div className="panel-head"><div><span className="eyebrow">OPERATIONAL RECORD</span><h2>Event activity</h2></div><button className="text-button">View incident log <ChevronRight size={15} /></button></div>
+          <section className="panel activity-panel scroll-target" id="producer-activity">
+            <div className="panel-head"><div><span className="eyebrow">OPERATIONAL RECORD</span><h2>Event activity</h2></div><button className="text-button" aria-expanded={showFullLog} onClick={() => setShowFullLog((showing) => !showing)}>{showFullLog ? "Show recent" : "View full log"} <ChevronRight size={15} /></button></div>
             <div className="event-list">
               {persistentEvents.length > 0
-                ? persistentEvents.slice(0, 4).map((event, index) => <div className="event-row" key={event.id ?? index}><span>{event.createdAt ? new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "NOW"}</span><i className={event.action?.includes("rescue") ? "warn" : "good"} /><strong>{event.detail || event.action}</strong></div>)
-                : events.slice(0, 4).map((event, index) => <div className="event-row" key={`${event.time}-${index}`}><span>{event.time}</span><i className={event.tone} /><strong>{event.text}</strong></div>)}
+                ? persistentEvents.slice(0, showFullLog ? persistentEvents.length : 4).map((event, index) => <div className="event-row" key={event.id ?? index}><span>{event.createdAt ? new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "NOW"}</span><i className={event.action?.includes("rescue") ? "warn" : "good"} /><strong>{event.detail || event.action}</strong></div>)
+                : events.slice(0, showFullLog ? events.length : 4).map((event, index) => <div className="event-row" key={`${event.time}-${index}`}><span>{event.time}</span><i className={event.tone} /><strong>{event.text}</strong></div>)}
             </div>
           </section>
-          <section className="panel support-panel">
+          <section className="panel support-panel scroll-target" id="producer-support">
             <div className="panel-head"><div><span className="eyebrow">NEEDS ATTENTION</span><h2>Support queue</h2></div><span className="queue-count">2 OPEN</span></div>
             <div className="support-ticket"><span className="mini-avatar coral">RK</span><div><strong>Rina Kapoor</strong><small>Can’t share screen · Studio One</small></div><button onClick={() => notify("You joined Rina’s private support room.")}>Join</button></div>
             <div className="support-ticket"><span className="mini-avatar violet">DM</span><div><strong>David Mills</strong><small>Audio echo · Green room</small></div><button onClick={() => notify("You joined David’s private support room.")}>Join</button></div>
