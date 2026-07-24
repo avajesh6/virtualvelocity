@@ -3,23 +3,30 @@ import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
-
 const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
+  name: "virtualvelocity",
   main: "./worker/index.ts",
+  compatibility_date: "2026-07-24",
   compatibility_flags: ["nodejs_compat"],
+  vars: {
+    NEXT_PUBLIC_LIVEKIT_URL:
+      "wss://virtualvelocity-xn55gx33.livekit.cloud",
+    NEXT_PUBLIC_SUPABASE_URL:
+      "https://mrpmpvjbognefbtayivn.supabase.co",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+      "sb_publishable_V4SFYC5FZwQSj223tX5gLg_mrN1WOIh",
+  },
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: "velocity-venue-db",
+          database_id: "dea0bb5e-5e48-466a-8b87-737367bce431",
         },
       ]
     : [],
