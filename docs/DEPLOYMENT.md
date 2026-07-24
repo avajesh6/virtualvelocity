@@ -2,11 +2,11 @@
 
 ## Current target
 
-The test-submission deployment uses:
+The production deployment uses:
 
 `https://virtualvelocity.avajesh6.workers.dev`
 
-Connecting a custom domain is intentionally the final post-submission TODO.
+Connecting a custom domain remains the final launch TODO.
 
 ## Prerequisites
 
@@ -86,6 +86,25 @@ The live suite checks page availability, invalid/unauthorized failure paths, and
 a representative concurrent request burst.
 
 ## Deploy
+
+Pushes to `main` are validated and deployed automatically by
+`.github/workflows/deploy.yml`. The workflow installs the locked dependencies,
+runs lint and the complete build/test suite, and deploys only after those checks
+pass. It can also be rerun manually from the repository's **Actions** page.
+
+The repository requires:
+
+- GitHub variable `CLOUDFLARE_ACCOUNT_ID`
+- GitHub variables `NEXT_PUBLIC_LIVEKIT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- GitHub secret `CLOUDFLARE_API_TOKEN`, created with the minimum Cloudflare
+  Workers deployment permissions for this account
+
+Worker runtime secrets such as `LIVEKIT_API_SECRET` remain stored in Cloudflare
+and are not copied into GitHub. Database migrations remain an explicit,
+reviewed operation and are not applied automatically during a code deployment.
+
+For an emergency or locally initiated deployment:
 
 ```powershell
 npm.cmd run deploy:cloudflare
