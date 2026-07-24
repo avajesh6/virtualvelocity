@@ -1,25 +1,11 @@
 import { RoomServiceClient, TrackType } from "livekit-server-sdk";
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { authorizeProducerRequest } from "../../../producer-auth";
 
 const SOURCE_ROOMS = new Set([
   "global-innovation-stage",
   "global-innovation-studio",
   "global-innovation-lounge",
 ]);
-
-async function authorizeProducer() {
-  const user = await getChatGPTUser();
-  if (!user) return { error: Response.json({ error: "Producer sign-in is required." }, { status: 401 }) };
-
-  const allowlist = (process.env.PRODUCER_EMAILS ?? "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  if (allowlist.length > 0 && !allowlist.includes(user.email.toLowerCase())) {
-    return { error: Response.json({ error: "This account is not an authorized producer." }, { status: 403 }) };
-  }
-  return { user };
-}
 
 function getRoomClient() {
   const url = process.env.NEXT_PUBLIC_LIVEKIT_URL;
@@ -34,8 +20,8 @@ function validRoom(room: unknown): room is string {
 }
 
 export async function GET(request: Request) {
-  const auth = await authorizeProducer();
-  if (auth.error) return auth.error;
+  const auth = await authorizeProducerRequest(request);
+  if ("error" in auth) return auth.error;
 
   const room = new URL(request.url).searchParams.get("room");
   if (!validRoom(room)) return Response.json({ error: "Invalid room." }, { status: 400 });
@@ -62,8 +48,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await authorizeProducer();
-  if (auth.error) return auth.error;
+  const auth = await authorizeProducerRequest(request);
+  if ("error" in auth) return auth.error;
 
   let body: { action?: string; room?: string; identity?: string; trackSid?: string | null };
   try {

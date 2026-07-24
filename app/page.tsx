@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { chatGPTSignInPath, chatGPTSignOutPath, getChatGPTUser } from "./chatgpt-auth";
 import { ConferenceExperience } from "./conference-experience";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const user = await getChatGPTUser();
-  return (
-    <ConferenceExperience
-      producerUser={user ? { displayName: user.displayName, email: user.email } : null}
-      producerSignInPath={chatGPTSignInPath("/?role=producer")}
-      producerSignOutPath={chatGPTSignOutPath("/")}
-    />
-  );
+  return <ConferenceExperience />;
 }

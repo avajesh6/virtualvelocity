@@ -45,11 +45,12 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { getSupabaseBrowserClient } from "./supabase-client";
 
 type Role = "attendee" | "producer";
 type RoomId = "stage" | "studio" | "expo" | "lounge";
 type LiveConnection = { token: string; serverUrl: string; roomName: string };
-type ProducerUser = { displayName: string; email: string };
+type ProducerUser = { displayName: string; email: string; role: Role };
 type ManagedParticipant = { identity: string; name: string; audioTrackSid: string | null; audioMuted: boolean };
 
 const rooms = [
@@ -135,16 +136,16 @@ function StatusPill({ children, tone = "live" }: { children: React.ReactNode; to
   return <span className={`status-pill ${tone}`}><i />{children}</span>;
 }
 
-export function ConferenceExperience({
-  producerUser,
-  producerSignInPath,
-  producerSignOutPath,
-}: {
-  producerUser: ProducerUser | null;
-  producerSignInPath: string;
-  producerSignOutPath: string;
-}) {
+export function ConferenceExperience() {
   const [role, setRole] = useState<Role>("attendee");
+  const [producerUser, setProducerUser] = useState<ProducerUser | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [room, setRoom] = useState<RoomId>("stage");
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
@@ -170,10 +171,123 @@ export function ConferenceExperience({
   }, [notice]);
 
   useEffect(() => {
-    if (producerUser && new URLSearchParams(window.location.search).get("role") === "producer") {
-      setRole("producer");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setAuthReady(true);
+      return;
     }
-  }, [producerUser]);
+
+    const applySession = async (token: string | null) => {
+      setAccessToken(token);
+      if (!token) {
+        setProducerUser(null);
+        setRole("attendee");
+        setAuthReady(true);
+        return;
+      }
+      try {
+        const response = await fetch("/api/auth/me", {
+          headers: { authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const payload = await response.json() as {
+          user?: ProducerUser;
+          error?: string;
+        };
+        if (!response.ok || !payload.user) {
+          throw new Error(payload.error || "Your account could not be verified.");
+        }
+        setProducerUser(payload.user);
+        if (
+          payload.user.role === "producer" &&
+          new URLSearchParams(window.location.search).get("role") === "producer"
+        ) {
+          setRole("producer");
+        }
+      } catch (error) {
+        setProducerUser(null);
+        setAuthError(error instanceof Error ? error.message : "Your account could not be verified.");
+      } finally {
+        setAuthReady(true);
+      }
+    };
+
+    void supabase.auth.getSession().then(({ data }) => {
+      void applySession(data.session?.access_token ?? null);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void applySession(session?.access_token ?? null);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const signIn = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setAuthError("Supabase authentication is not configured.");
+      return;
+    }
+    setAuthSubmitting(true);
+    setAuthError(null);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPassword,
+    });
+    if (error || !data.session) {
+      setAuthError(error?.message || "The email or password was not accepted.");
+      setAuthSubmitting(false);
+      return;
+    }
+    try {
+      const response = await fetch("/api/auth/me", {
+        headers: { authorization: `Bearer ${data.session.access_token}` },
+        cache: "no-store",
+      });
+      const payload = await response.json() as {
+        user?: ProducerUser;
+        error?: string;
+      };
+      if (!response.ok || !payload.user) {
+        throw new Error(payload.error || "Your account could not be verified.");
+      }
+      setAccessToken(data.session.access_token);
+      setProducerUser(payload.user);
+      setAuthDialogOpen(false);
+      setAuthPassword("");
+      setNotice(
+        payload.user.role === "producer"
+          ? "Producer account verified."
+          : "Attendee account verified.",
+      );
+      if (payload.user.role === "producer") setRole("producer");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Your account could not be verified.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const signOut = async () => {
+    const supabase = getSupabaseBrowserClient();
+    await supabase?.auth.signOut();
+    setProducerUser(null);
+    setAccessToken(null);
+    setRole("attendee");
+    setNotice("You have signed out.");
+  };
+
+  const openProducer = () => {
+    if (!producerUser) {
+      setAuthError(null);
+      setAuthDialogOpen(true);
+      return;
+    }
+    if (producerUser.role !== "producer") {
+      setNotice("This account has attendee access only.");
+      return;
+    }
+    setRole("producer");
+  };
 
   const enterRoom = (next: RoomId) => {
     setRoom(next);
@@ -217,7 +331,10 @@ export function ConferenceExperience({
     try {
       const response = await fetch("/api/producer/room", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ action: "rescue", room: "global-innovation-stage" }),
       });
       const payload = (await response.json()) as { moved?: number };
@@ -288,10 +405,10 @@ export function ConferenceExperience({
         <div className="top-actions">
           <div className="role-switch" aria-label="Switch demo role">
             <button className={role === "attendee" ? "active" : ""} onClick={() => setRole("attendee")}>Attendee</button>
-            <button className={role === "producer" ? "active" : ""} onClick={() => producerUser ? setRole("producer") : window.location.assign(producerSignInPath)}>{producerUser ? "Producer" : "Producer sign in"}</button>
+            <button className={role === "producer" ? "active" : ""} onClick={openProducer} disabled={!authReady}>{producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
           </div>
           <button className="icon-button" aria-label="Notifications"><Bell size={18} /><span className="notification-dot" /></button>
-          {producerUser && role === "producer" ? <a className="profile-button" href={producerSignOutPath} aria-label="Sign out of producer mode" title={`Signed in as ${producerUser.email}`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</a> : <button className="profile-button" aria-label="Open profile">AM</button>}
+          {producerUser ? <button className="profile-button" onClick={signOut} aria-label="Sign out" title={`Signed in as ${producerUser.email}. Click to sign out.`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</button> : <button className="profile-button" onClick={() => setAuthDialogOpen(true)} aria-label="Sign in">AM</button>}
         </div>
       </header>
 
@@ -322,6 +439,20 @@ export function ConferenceExperience({
           events={events}
           notify={setNotice}
           producerUser={producerUser!}
+          accessToken={accessToken!}
+        />
+      )}
+
+      {authDialogOpen && (
+        <AuthDialog
+          email={authEmail}
+          password={authPassword}
+          setEmail={setAuthEmail}
+          setPassword={setAuthPassword}
+          submitting={authSubmitting}
+          error={authError}
+          close={() => setAuthDialogOpen(false)}
+          signIn={signIn}
         />
       )}
 
@@ -504,6 +635,44 @@ function AttendeeView({
   );
 }
 
+function AuthDialog({
+  email,
+  password,
+  setEmail,
+  setPassword,
+  submitting,
+  error,
+  close,
+  signIn,
+}: {
+  email: string;
+  password: string;
+  setEmail: (value: string) => void;
+  setPassword: (value: string) => void;
+  submitting: boolean;
+  error: string | null;
+  close: () => void;
+  signIn: () => void;
+}) {
+  return (
+    <div className="live-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <form className="live-dialog auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" onSubmit={(event) => { event.preventDefault(); void signIn(); }}>
+        <button className="live-dialog-close" type="button" onClick={close} aria-label="Close sign in"><X size={19} /></button>
+        <span className="eyebrow"><ShieldCheck size={14} /> SECURE ACCOUNT ACCESS</span>
+        <h2 id="auth-dialog-title">Sign in to Velocity Venue</h2>
+        <p>Use the email and password created for your attendee or producer account.</p>
+        <label htmlFor="auth-email">Email address</label>
+        <input id="auth-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus />
+        <label htmlFor="auth-password">Password</label>
+        <input id="auth-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required />
+        {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Sign-in unsuccessful</strong>{error}</span></div>}
+        <button className="primary-button full" type="submit" disabled={submitting}>{submitting ? "Verifying account…" : "Sign in securely"}<ArrowRight size={16} /></button>
+        <div className="auth-note"><ShieldCheck size={14} />Passwords are handled by Supabase Auth and are never stored by this app.</div>
+      </form>
+    </div>
+  );
+}
+
 function LiveJoinDialog({
   name,
   setName,
@@ -588,6 +757,7 @@ function ProducerView({
   events,
   notify,
   producerUser,
+  accessToken,
 }: {
   rescueState: "idle" | "moving" | "complete";
   triggerRescue: () => void;
@@ -597,6 +767,7 @@ function ProducerView({
   events: { time: string; text: string; tone: string }[];
   notify: (message: string) => void;
   producerUser: ProducerUser;
+  accessToken: string;
 }) {
   const [managedParticipants, setManagedParticipants] = useState<ManagedParticipant[]>([]);
   const [participantStatus, setParticipantStatus] = useState<"loading" | "ready" | "demo" | "error">("loading");
@@ -604,7 +775,10 @@ function ProducerView({
   const refreshParticipants = async () => {
     setParticipantStatus("loading");
     try {
-      const response = await fetch("/api/producer/room?room=global-innovation-stage", { cache: "no-store" });
+      const response = await fetch("/api/producer/room?room=global-innovation-stage", {
+        cache: "no-store",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
       const payload = (await response.json()) as { participants?: ManagedParticipant[] };
       if (!response.ok) {
         setManagedParticipants([]);
@@ -625,7 +799,10 @@ function ProducerView({
   const manageParticipant = async (action: "remove" | "mute", participant: ManagedParticipant) => {
     const response = await fetch("/api/producer/room", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({ action, room: "global-innovation-stage", identity: participant.identity, trackSid: participant.audioTrackSid }),
     });
     if (!response.ok) {
