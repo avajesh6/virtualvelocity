@@ -24,6 +24,7 @@ jobs:
       NEXT_PUBLIC_LIVEKIT_URL: ${{ vars.NEXT_PUBLIC_LIVEKIT_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
     steps:
       - name: Check out the release
@@ -47,9 +48,16 @@ jobs:
         run: npm test
 
       - name: Deploy the verified build
+        if: env.CLOUDFLARE_API_TOKEN != ''
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.92.0"
           command: deploy
+
+      # Keep validation green while a repository is being bootstrapped. Once
+      # the scoped token exists, the deploy step above runs automatically.
+      - name: Explain a skipped deployment
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::notice::Cloudflare deployment was skipped because CLOUDFLARE_API_TOKEN is not configured."

@@ -102,6 +102,11 @@ The repository requires:
 - GitHub secret `CLOUDFLARE_API_TOKEN`, created with the minimum Cloudflare
   Workers deployment permissions for this account
 
+Until that secret is added, pushes still run every validation check but skip
+the deployment with a visible Actions notice. Add the secret and run the
+workflow manually once to activate deployment without requiring another code
+change.
+
 Worker runtime secrets such as `LIVEKIT_API_SECRET` remain stored in Cloudflare
 and are not copied into GitHub. Database migrations remain an explicit,
 reviewed operation and are not applied automatically during a code deployment.
