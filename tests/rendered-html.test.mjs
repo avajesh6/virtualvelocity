@@ -17,6 +17,13 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(experience, /api\/leads/);
   assert.match(experience, /LiveKitRoom/);
   assert.match(experience, /VideoConference/);
+  assert.match(experience, /PreJoin/);
+  assert.match(experience, /useConnectionState/);
+  assert.match(experience, /useParticipants/);
+  assert.match(experience, /velocity-theme/);
+  assert.match(experience, /Conference invite copied/);
+  assert.match(experience, /signInWithOAuth/);
+  assert.match(experience, /Continue with Google/);
   assert.match(layout, /og\.png/);
   assert.doesNotMatch(`${page}${layout}`, /codex-preview|SkeletonPreview/);
 });

@@ -4,11 +4,16 @@
 
 1. Confirm the attendee venue loads from the production URL.
 2. Sign in with a producer account and confirm Producer mode opens.
-3. Join each LiveKit room with a test attendee.
-4. Verify participant refresh, mute, and removal in a non-production rehearsal room.
-5. Confirm the run of show loads from D1 and can be advanced.
-6. Send test calendar, Slack, Teams, and CRM requests only to approved test endpoints.
-7. Confirm a backup room can be created and that the event team understands Rescue Mode.
+3. Join each LiveKit room through the device-preview lobby and verify camera,
+   microphone, speaker output, participant video, screen sharing, and chat.
+4. Copy an invite link from the conference header and verify it opens the expected
+   room after authentication.
+5. Check the attendee experience in both light and dark modes at desktop and mobile
+   widths.
+6. Verify participant refresh, mute, and removal in a non-production rehearsal room.
+7. Confirm the run of show loads from D1 and can be advanced.
+8. Send test calendar, Slack, Teams, and CRM requests only to approved test endpoints.
+9. Confirm a backup room can be created and that the event team understands Rescue Mode.
 
 ## During an event
 
@@ -41,6 +46,8 @@ manually after the event.
 - Confirm the Supabase URL and publishable key are configured.
 - Confirm email/password sign-in is enabled.
 - Confirm the user exists and the password is current.
+- For Google, confirm the provider is enabled in Supabase and its Google Client ID and Client Secret are valid.
+- Confirm the Workers URL is present in Supabase redirect URLs and the Supabase callback is present in Google authorized redirect URIs.
 
 ### Account signs in as attendee
 
@@ -74,4 +81,3 @@ Sign out and sign in again after changing role metadata.
 3. Rotate temporary provider credentials when required.
 4. Record follow-up engineering work separately from the immutable event audit trail.
 5. Connect the custom domain only after the test submission phase, as documented in the project TODO.
-

@@ -9,6 +9,9 @@ A branded virtual-event venue for attendees paired with a live producer command 
 - Rescue Mode simulation for moving a disrupted session to a backup room
 - Expo lead capture persisted to Cloudflare D1, with an optional CRM webhook
 - Secure server-side LiveKit token endpoint and a real LiveKit conference room with device controls, screen sharing, chat, and reconnection handling; API credentials never reach the browser
+- Camera and microphone preview with device selection before joining
+- Responsive participant layout, live participant/connection status, and shareable room links
+- Persistent light and dark appearance modes
 - Responsive, accessible UI and a generated Open Graph social card
 
 ## Run locally
@@ -41,7 +44,7 @@ PRODUCER_EMAILS=producer@example.com
 
 `CRM_WEBHOOK_URL` is optional and can point to HubSpot, Salesforce, Zapier, Make, or an internal event-ingestion endpoint. Set `CRM_PROVIDER` to `hubspot`, `salesforce`, or `generic`. Calendar, Slack, and Teams adapters use their corresponding webhook URLs. In a hosted environment, bind a D1 database as `DB` and apply the migrations in `drizzle/`.
 
-Producer mode uses Supabase email/password sign-in. Grant producer access with Supabase `app_metadata.role` (`producer` or `admin`) or the optional comma-separated `PRODUCER_EMAILS` allowlist.
+Producer mode uses Supabase Google OAuth or email/password sign-in. Google must be enabled in the Supabase provider settings as described in the deployment guide. Grant producer access separately with Supabase `app_metadata.role` (`producer` or `admin`) or the optional comma-separated `PRODUCER_EMAILS` allowlist.
 
 ## Verification
 
@@ -75,3 +78,6 @@ The deployed application also includes a user-facing guide at `/docs`, available
 1. Configure and smoke-test the production Supabase, LiveKit, D1, calendar, messaging, and CRM credentials.
 2. Run representative load, cross-browser, screen-reader, and provider failure drills in the production environment.
 3. TODO (final): connect the preferred custom domain after the Worker-hosted test submission is accepted.
+
+Until that final domain task is completed, the supported production URL is
+`https://virtualvelocity.avajesh6.workers.dev`.

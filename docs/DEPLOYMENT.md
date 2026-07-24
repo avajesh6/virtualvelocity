@@ -15,6 +15,7 @@ Connecting a custom domain is intentionally the final post-submission TODO.
 - A D1 database bound as `DB`
 - A LiveKit project
 - A Supabase project with email/password authentication enabled
+- For Google sign-in, a Google Cloud OAuth web client connected to the Supabase Google provider
 
 ## Environment variables
 
@@ -34,6 +35,21 @@ Connecting a custom domain is intentionally the final post-submission TODO.
 | `TEAMS_WEBHOOK_URL` | Optional | Yes | Teams webhook endpoint |
 
 Never commit real secret values. `.env.example` documents names only.
+
+## Google sign-in configuration
+
+The application calls Supabase `signInWithOAuth({ provider: "google" })`; no
+Google client secret is stored in the Worker.
+
+1. In Google Auth Platform, create an OAuth client with application type **Web application**.
+2. Add `https://virtualvelocity.avajesh6.workers.dev` as an authorized JavaScript origin.
+3. Add the Supabase callback shown on **Supabase → Authentication → Sign In / Providers → Google** as an authorized redirect URI. It has the form `https://<project-ref>.supabase.co/auth/v1/callback`.
+4. Paste the Google Client ID and Client Secret into the Supabase Google provider and enable it.
+5. In **Supabase → Authentication → URL Configuration**, set the Site URL to the Workers URL and allow `https://virtualvelocity.avajesh6.workers.dev/**`.
+6. Grant Producer access separately through `app_metadata.role` or `PRODUCER_EMAILS`. Google authentication identifies the user; it does not grant operational privileges.
+
+When the custom domain is added later, register it in Google and Supabase before
+switching production traffic.
 
 ## Database migration
 
@@ -83,4 +99,3 @@ inspect the rendered attendee page for console and accessibility errors.
 Use Cloudflare Workers deployment history to restore the preceding known-good
 version. Database migrations should remain backward compatible; do not remove
 columns or tables as part of an emergency Worker rollback.
-

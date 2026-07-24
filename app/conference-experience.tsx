@@ -2,9 +2,13 @@
 
 import {
   LiveKitRoom,
+  type LocalUserChoices,
+  PreJoin,
   RoomAudioRenderer,
   StartAudio,
   VideoConference,
+  useConnectionState,
+  useParticipants,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
 import {
@@ -25,21 +29,26 @@ import {
   HeartPulse,
   LayoutDashboard,
   LifeBuoy,
+  Link2,
   Map,
   MessageSquareText,
   Mic,
   MicOff,
+  Moon,
   MonitorUp,
   MoreHorizontal,
   Radio,
   Send,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Store,
+  Sun,
   TimerReset,
   Users,
   Video,
   WandSparkles,
+  Wifi,
   X,
   Zap,
 } from "lucide-react";
@@ -47,8 +56,14 @@ import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "./supabase-client";
 
 type Role = "attendee" | "producer";
+type Theme = "dark" | "light";
 type RoomId = "stage" | "studio" | "expo" | "lounge";
-type LiveConnection = { token: string; serverUrl: string; roomName: string };
+type LiveConnection = {
+  token: string;
+  serverUrl: string;
+  roomName: string;
+  choices: LocalUserChoices;
+};
 type ProducerUser = { displayName: string; email: string; role: Role };
 type ManagedParticipant = { identity: string; name: string; audioTrackSid: string | null; audioMuted: boolean };
 type RunOfShowItem = {
@@ -151,6 +166,12 @@ function StatusPill({ children, tone = "live" }: { children: React.ReactNode; to
 export function ConferenceExperience() {
   // The attendee and producer experiences share one shell so a producer can
   // inspect the attendee surface without losing the authenticated session.
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "dark";
+    const stored = window.localStorage.getItem("velocity-theme");
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
   const [role, setRole] = useState<Role>("attendee");
   const [producerUser, setProducerUser] = useState<ProducerUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -171,12 +192,25 @@ export function ConferenceExperience() {
   const [, setActiveRos] = useState(2);
   const [events, setEvents] = useState(initialEvents);
   const [liveDialogOpen, setLiveDialogOpen] = useState(false);
-  const [liveName, setLiveName] = useState("Alex Morgan");
   const [liveJoining, setLiveJoining] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveConnection, setLiveConnection] = useState<LiveConnection | null>(null);
 
   const activeRoom = useMemo(() => rooms.find((item) => item.id === room) ?? rooms[0], [room]);
+
+  useEffect(() => {
+    // Theme is a device-local preference, so browser storage is appropriate.
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      window.localStorage.setItem("velocity-theme", next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!notice) return;
@@ -285,6 +319,31 @@ export function ConferenceExperience() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setAuthError("Supabase authentication is not configured.");
+      return;
+    }
+    setAuthSubmitting(true);
+    setAuthError(null);
+
+    // Supabase owns OAuth state validation and returns the resulting session to
+    // its browser client. The role query restores Producer mode after redirect,
+    // but the server still decides whether this Google account is a producer.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/?role=producer`,
+        queryParams: { prompt: "select_account" },
+      },
+    });
+    if (error) {
+      setAuthError(error.message || "Google sign-in could not be started.");
+      setAuthSubmitting(false);
+    }
+  };
+
   const signOut = async () => {
     const supabase = getSupabaseBrowserClient();
     await supabase?.auth.signOut();
@@ -386,13 +445,14 @@ export function ConferenceExperience() {
     setNotice("Rescue simulation reset.");
   };
 
-  const openLiveRoom = () => {
+  const openLiveRoom = (nextRoom?: RoomId) => {
+    if (nextRoom && nextRoom !== "expo") setRoom(nextRoom);
     setLiveError(null);
     setLiveDialogOpen(true);
   };
 
-  const connectLiveRoom = async () => {
-    if (!liveName.trim()) {
+  const connectLiveRoom = async (choices: LocalUserChoices) => {
+    if (!choices.username.trim()) {
       setLiveError("Enter the name you want other attendees to see.");
       return;
     }
@@ -405,13 +465,20 @@ export function ConferenceExperience() {
       const response = await fetch("/api/livekit-token", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identity: liveName.trim(), room: roomName }),
+        body: JSON.stringify({ identity: choices.username.trim(), room: roomName }),
       });
       const payload = (await response.json()) as { token?: string; serverUrl?: string; message?: string; error?: string };
       if (!response.ok || !payload.token || !payload.serverUrl) {
         throw new Error(payload.message || payload.error || "The live room is temporarily unavailable.");
       }
-      setLiveConnection({ token: payload.token, serverUrl: payload.serverUrl, roomName });
+      setMicOn(choices.audioEnabled);
+      setCameraOn(choices.videoEnabled);
+      setLiveConnection({
+        token: payload.token,
+        serverUrl: payload.serverUrl,
+        roomName,
+        choices: { ...choices, username: choices.username.trim() },
+      });
       setLiveDialogOpen(false);
       setNotice("Connected securely to the live room.");
     } catch (error) {
@@ -434,6 +501,15 @@ export function ConferenceExperience() {
             <button className={role === "attendee" ? "active" : ""} onClick={() => setRole("attendee")}>Attendee</button>
             <button className={role === "producer" ? "active" : ""} onClick={openProducer} disabled={!authReady}>{producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
           </div>
+          <button
+            className="icon-button theme-toggle"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <button className="icon-button" aria-label="Notifications"><Bell size={18} /><span className="notification-dot" /></button>
           {producerUser ? <button className="profile-button" onClick={signOut} aria-label="Sign out" title={`Signed in as ${producerUser.email}. Click to sign out.`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</button> : <button className="profile-button" onClick={() => setAuthDialogOpen(true)} aria-label="Sign in">AM</button>}
         </div>
@@ -479,14 +555,15 @@ export function ConferenceExperience() {
           error={authError}
           close={() => setAuthDialogOpen(false)}
           signIn={signIn}
+          signInWithGoogle={signInWithGoogle}
         />
       )}
 
       {liveDialogOpen && (
         <LiveJoinDialog
-          name={liveName}
-          setName={setLiveName}
           roomTitle={activeRoom.title}
+          roomDescription={activeRoom.description}
+          attendeeCount={activeRoom.count}
           joining={liveJoining}
           error={liveError}
           close={() => setLiveDialogOpen(false)}
@@ -498,8 +575,9 @@ export function ConferenceExperience() {
         <ConnectedLiveRoom
           connection={liveConnection}
           roomTitle={activeRoom.title}
-          cameraOn={cameraOn}
-          micOn={micOn}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          notify={setNotice}
           leave={() => setLiveConnection(null)}
         />
       )}
@@ -537,7 +615,7 @@ function AttendeeView({
   leadSent: boolean;
   leadSending: boolean;
   captureLead: () => void;
-  openLiveRoom: () => void;
+  openLiveRoom: (room?: RoomId) => void;
   liveConnected: boolean;
 }) {
   return (
@@ -545,9 +623,9 @@ function AttendeeView({
       <aside className="side-nav">
         <div>
           <button className="nav-item active"><Map size={20} /><span>Venue</span></button>
-          <button className="nav-item"><CalendarDays size={20} /><span>Agenda</span></button>
-          <button className="nav-item"><Users size={20} /><span>People</span></button>
-          <button className="nav-item"><Store size={20} /><span>Expo</span></button>
+          <button className="nav-item" onClick={() => document.getElementById("rooms")?.scrollIntoView({ behavior: "smooth" })}><CalendarDays size={20} /><span>Agenda</span></button>
+          <button className="nav-item" onClick={() => setChatOpen(true)}><Users size={20} /><span>People</span></button>
+          <button className="nav-item" onClick={() => enterRoom("expo")}><Store size={20} /><span>Expo</span></button>
         </div>
         <div>
           <button className="nav-item" onClick={() => window.location.assign("/docs")}><CircleHelp size={20} /><span>Help</span></button>
@@ -570,7 +648,7 @@ function AttendeeView({
             <h2>Building trust in<br />an AI-first world</h2>
             <p>Maya Chen, Elias Brooks and Sofia Alvarez unpack what responsible innovation looks like when the stakes are real.</p>
             <div className="speaker-row"><AvatarStack /><span>3 speakers · 286 watching</span></div>
-            <button className="primary-button" onClick={() => room === "stage" ? openLiveRoom() : enterRoom("stage")}>{room === "stage" ? "Join live room" : "Join main stage"}<ArrowRight size={17} /></button>
+            <button className="primary-button" onClick={() => openLiveRoom("stage")}>Join main stage<ArrowRight size={17} /></button>
           </div>
           <div className="stage-visual" aria-label="Live speaker preview">
             {people.map((person, index) => (
@@ -589,16 +667,27 @@ function AttendeeView({
           <button className="text-button">View full agenda <ChevronRight size={16} /></button>
         </div>
 
-        <div className="room-grid">
+        <div className="conference-capability-strip" aria-label="Conference capabilities">
+          <span><Video size={15} /><strong>HD video</strong><small>Adaptive quality</small></span>
+          <span><MonitorUp size={15} /><strong>Screen sharing</strong><small>Present in one click</small></span>
+          <span><MessageSquareText size={15} /><strong>Live chat</strong><small>Built into every room</small></span>
+          <span><Settings2 size={15} /><strong>Device control</strong><small>Switch during the call</small></span>
+        </div>
+
+        <div className="room-grid" id="rooms">
           {rooms.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={`room-card ${item.accent} ${room === item.id ? "selected" : ""}`} onClick={() => enterRoom(item.id)}>
+              <button
+                key={item.id}
+                className={`room-card ${item.accent} ${room === item.id ? "selected" : ""}`}
+                onClick={() => item.id === "expo" ? enterRoom(item.id) : openLiveRoom(item.id)}
+              >
                 <div className="room-top"><span className="room-icon"><Icon size={19} /></span><span className="room-count"><Users size={13} />{item.count}</span></div>
                 <small>{item.kicker}</small>
                 <strong>{item.title}</strong>
                 <p>{item.description}</p>
-                <span className="room-link">Enter space <ArrowRight size={15} /></span>
+                <span className="room-link">{item.id === "expo" ? "Explore booths" : "Open video lobby"} <ArrowRight size={15} /></span>
               </button>
             );
           })}
@@ -616,7 +705,7 @@ function AttendeeView({
             <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>{cameraOn ? <Camera size={18} /> : <CameraOff size={18} />}</button>
             <button onClick={() => setChatOpen(!chatOpen)} aria-label="Toggle chat"><MessageSquareText size={18} /></button>
           </div>
-          {room !== "expo" && <button className="join-live-button" onClick={openLiveRoom}><Video size={15} />{liveConnected ? "Reopen live room" : "Connect to live room"}</button>}
+          {room !== "expo" && <button className="join-live-button" onClick={() => openLiveRoom(room)}><Video size={15} />{liveConnected ? "Reopen live room" : "Open video lobby"}</button>}
           <div className="connection-status"><i /> {liveConnected ? "LiveKit room connected" : "Secure media preflight ready"}</div>
         </div>
 
@@ -670,6 +759,7 @@ function AuthDialog({
   error,
   close,
   signIn,
+  signInWithGoogle,
 }: {
   email: string;
   password: string;
@@ -679,6 +769,7 @@ function AuthDialog({
   error: string | null;
   close: () => void;
   signIn: () => void;
+  signInWithGoogle: () => void;
 }) {
   return (
     <div className="live-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
@@ -686,53 +777,69 @@ function AuthDialog({
         <button className="live-dialog-close" type="button" onClick={close} aria-label="Close sign in"><X size={19} /></button>
         <span className="eyebrow"><ShieldCheck size={14} /> SECURE ACCOUNT ACCESS</span>
         <h2 id="auth-dialog-title">Sign in to Velocity Venue</h2>
-        <p>Use the email and password created for your attendee or producer account.</p>
+        <p>Continue with Google, or use the email and password created for your attendee or producer account.</p>
+        <button className="google-auth-button" type="button" onClick={() => void signInWithGoogle()} disabled={submitting}>
+          <span aria-hidden="true">G</span>{submitting ? "Opening secure sign-in…" : "Continue with Google"}
+        </button>
+        <div className="auth-divider"><span>OR USE EMAIL</span></div>
         <label htmlFor="auth-email">Email address</label>
         <input id="auth-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus />
         <label htmlFor="auth-password">Password</label>
         <input id="auth-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required />
         {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Sign-in unsuccessful</strong>{error}</span></div>}
         <button className="primary-button full" type="submit" disabled={submitting}>{submitting ? "Verifying account…" : "Sign in securely"}<ArrowRight size={16} /></button>
-        <div className="auth-note"><ShieldCheck size={14} />Passwords are handled by Supabase Auth and are never stored by this app.</div>
+        <div className="auth-note"><ShieldCheck size={14} />Authentication is handled by Supabase. Google and password credentials are never stored by this app.</div>
       </form>
     </div>
   );
 }
 
 function LiveJoinDialog({
-  name,
-  setName,
   roomTitle,
+  roomDescription,
+  attendeeCount,
   joining,
   error,
   close,
   connect,
 }: {
-  name: string;
-  setName: (value: string) => void;
   roomTitle: string;
+  roomDescription: string;
+  attendeeCount: number;
   joining: boolean;
   error: string | null;
   close: () => void;
-  connect: () => void;
+  connect: (choices: LocalUserChoices) => void;
 }) {
   return (
     <div className="live-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-      <form className="live-dialog" role="dialog" aria-modal="true" aria-labelledby="live-dialog-title" onSubmit={(event) => { event.preventDefault(); connect(); }}>
+      <section className="live-dialog live-prejoin-dialog" role="dialog" aria-modal="true" aria-labelledby="live-dialog-title">
         <button className="live-dialog-close" type="button" onClick={close} aria-label="Close live room setup"><X size={19} /></button>
-        <span className="eyebrow"><ShieldCheck size={14} /> SECURE ROOM PRE-FLIGHT</span>
-        <h2 id="live-dialog-title">Join {roomTitle}</h2>
-        <p>Your camera and microphone remain under your control. You can change devices after joining.</p>
-        <label htmlFor="live-display-name">Display name</label>
-        <input id="live-display-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} autoFocus />
-        <div className="preflight-devices">
-          <span><Mic size={16} />Microphone ready</span>
-          <span><Camera size={16} />Camera ready</span>
+        <div className="prejoin-heading">
+          <span className="eyebrow"><ShieldCheck size={14} /> DEVICE CHECK & LOBBY</span>
+          <h2 id="live-dialog-title">Join {roomTitle}</h2>
+          <p>{roomDescription}</p>
+          <div className="prejoin-room-facts">
+            <span><Users size={15} />{attendeeCount} in the room</span>
+            <span><ShieldCheck size={15} />Encrypted media</span>
+            <span><Settings2 size={15} />Devices remain editable</span>
+          </div>
         </div>
-        {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Live connection not configured</strong>{error}</span></div>}
-        <button className="primary-button full" type="submit" disabled={joining}>{joining ? "Connecting securely…" : "Enter live room"}<ArrowRight size={16} /></button>
+        <PreJoin
+          className="velocity-prejoin"
+          defaults={{ username: "Alex Morgan", videoEnabled: true, audioEnabled: true }}
+          joinLabel={joining ? "Connecting securely…" : "Join conference"}
+          micLabel="Microphone"
+          camLabel="Camera"
+          userLabel="Display name"
+          persistUserChoices
+          onValidate={(choices) => Boolean(choices.username.trim()) && !joining}
+          onSubmit={(choices) => void connect(choices)}
+          onError={(joinError) => console.warn("Media preview unavailable", joinError)}
+        />
+        {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Unable to join this room</strong>{error}</span></div>}
         <button className="live-demo-link" type="button" onClick={close}>Continue exploring the interactive demo</button>
-      </form>
+      </section>
     </div>
   );
 }
@@ -740,16 +847,28 @@ function LiveJoinDialog({
 function ConnectedLiveRoom({
   connection,
   roomTitle,
-  cameraOn,
-  micOn,
+  theme,
+  toggleTheme,
+  notify,
   leave,
 }: {
   connection: LiveConnection;
   roomTitle: string;
-  cameraOn: boolean;
-  micOn: boolean;
+  theme: Theme;
+  toggleTheme: () => void;
+  notify: (message: string) => void;
   leave: () => void;
 }) {
+  const copyInvite = async () => {
+    const invite = `${window.location.origin}/?room=${connection.roomName}`;
+    try {
+      await navigator.clipboard.writeText(invite);
+      notify("Conference invite copied.");
+    } catch {
+      notify("Copy unavailable. Use the current page URL to invite attendees.");
+    }
+  };
+
   return (
     <div className="live-room-overlay" role="dialog" aria-modal="true" aria-label={`${roomTitle} live room`}>
       <LiveKitRoom
@@ -757,19 +876,45 @@ function ConnectedLiveRoom({
         token={connection.token}
         serverUrl={connection.serverUrl}
         connect
-        video={cameraOn}
-        audio={micOn}
+        video={connection.choices.videoEnabled ? (connection.choices.videoDeviceId ? { deviceId: connection.choices.videoDeviceId } : true) : false}
+        audio={connection.choices.audioEnabled ? (connection.choices.audioDeviceId ? { deviceId: connection.choices.audioDeviceId } : true) : false}
         onDisconnected={leave}
         data-lk-theme="default"
       >
         <header className="live-room-header">
-          <div><StatusPill>LIVE</StatusPill><span>{roomTitle}</span><small>{connection.roomName}</small></div>
-          <button onClick={leave}><X size={18} />Leave room</button>
+          <div className="live-room-identity">
+            <BrandMark />
+            <span className="live-header-divider" />
+            <div><StatusPill>LIVE</StatusPill><strong>{roomTitle}</strong><small>{connection.roomName}</small></div>
+          </div>
+          <ConferenceRoomMeta />
+          <div className="live-room-actions">
+            <button className="live-header-action" type="button" onClick={() => void copyInvite()}><Link2 size={16} />Invite</button>
+            <button className="live-header-icon" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button className="leave-room-button" onClick={leave}><X size={18} />Leave room</button>
+          </div>
         </header>
         <div className="live-room-conference"><VideoConference /></div>
         <RoomAudioRenderer />
         <StartAudio label="Enable room audio" />
       </LiveKitRoom>
+    </div>
+  );
+}
+
+function ConferenceRoomMeta() {
+  // LiveKit's room context is the source of truth during reconnects and as
+  // participants enter or leave; no dashboard counters are simulated here.
+  const connectionState = useConnectionState();
+  const participants = useParticipants();
+  const connected = String(connectionState).toLowerCase() === "connected";
+
+  return (
+    <div className="conference-room-meta" aria-live="polite">
+      <span className={connected ? "connected" : "reconnecting"}><Wifi size={14} />{connected ? "Connected" : String(connectionState)}</span>
+      <span><Users size={14} />{participants.length} {participants.length === 1 ? "participant" : "participants"}</span>
     </div>
   );
 }

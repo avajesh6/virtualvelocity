@@ -20,7 +20,7 @@ const capabilities = [
   {
     icon: Users,
     title: "Attendee venue",
-    text: "Move between stage, studio, expo, and networking spaces; join secure LiveKit rooms; use chat and device controls; and capture expo interest.",
+    text: "Move between stage, studio, expo, and networking spaces; preview devices; join secure LiveKit rooms; share a screen; chat; and capture expo interest.",
   },
   {
     icon: Radio,
@@ -40,7 +40,9 @@ const capabilities = [
 ];
 
 const workflows = [
-  ["Join an event", "Choose a venue space, select Join live room, confirm your display name and device state, then enter the room."],
+  ["Join an event", "Choose a venue space, select Join live room, preview your camera, choose your microphone and camera, then enter the room."],
+  ["Run a video conference", "Use the participant grid, pin speakers, share your screen, exchange live chat messages, copy an invite link, and monitor connection status from the conference header."],
+  ["Choose an appearance", "Use the sun or moon control to switch between light and dark modes. Velocity Venue remembers the preference on this device."],
   ["Open producer mode", "Sign in with an authorized Supabase account. Producer access requires an app role or an address on the producer allowlist."],
   ["Advance the show", "Select the next run-of-show item. The chosen item becomes live, preceding items become complete, and the change is written to D1."],
   ["Handle a disruption", "Activate Rescue Mode from Main Stage. Velocity Venue creates a backup room, moves participants, and writes an incident and audit entry."],
@@ -103,9 +105,9 @@ export default function DocumentationPage() {
           <div className="docs-section-title"><span>03</span><div><small>CONNECTED SERVICES</small><h2>Integration behavior</h2></div></div>
           <div className="docs-copy">
             <h3>LiveKit</h3>
-            <p>Provides real-time audio, video, screen sharing, chat, participant administration, and room recovery. Browser clients receive short-lived room tokens; API credentials remain server-side.</p>
+            <p>Provides device preview, real-time audio and video, participant layout, screen sharing, chat, participant administration, and room recovery. Browser clients receive short-lived room tokens; API credentials remain server-side.</p>
             <h3>Supabase</h3>
-            <p>Authenticates producer accounts. Authorization is enforced again on every protected server endpoint, independent of what the interface displays.</p>
+            <p>Authenticates accounts with Google OAuth or email/password. Authorization is enforced again on every protected server endpoint, independent of the sign-in method or what the interface displays.</p>
             <h3>Cloudflare D1</h3>
             <p>Persists operational records. The venue continues with clearly labelled demo data when a local preview has no database binding.</p>
             <h3>Calendar, Slack, Teams, and CRM</h3>
