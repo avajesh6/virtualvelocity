@@ -203,6 +203,21 @@ export function ConferenceExperience() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  useEffect(() => {
+    // Invite URLs use the stable venue room id. Accept the older full LiveKit
+    // room name as well so previously copied links continue to work.
+    const requested = new URLSearchParams(window.location.search)
+      .get("room")
+      ?.replace("global-innovation-", "");
+    const invitedRoom = rooms.find((item) => item.id === requested)?.id;
+    if (invitedRoom && invitedRoom !== "expo") {
+      queueMicrotask(() => {
+        setRoom(invitedRoom);
+        setLiveDialogOpen(true);
+      });
+    }
+  }, []);
+
   const toggleTheme = () => {
     setTheme((current) => {
       const next = current === "dark" ? "light" : "dark";
@@ -860,7 +875,8 @@ function ConnectedLiveRoom({
   leave: () => void;
 }) {
   const copyInvite = async () => {
-    const invite = `${window.location.origin}/?room=${connection.roomName}`;
+    const roomId = connection.roomName.replace("global-innovation-", "");
+    const invite = `${window.location.origin}/?room=${roomId}`;
     try {
       await navigator.clipboard.writeText(invite);
       notify("Conference invite copied.");
