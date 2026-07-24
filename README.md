@@ -12,6 +12,11 @@ A branded virtual-event venue for attendees paired with a live producer command 
 - Camera and microphone preview with device selection before joining
 - Responsive participant layout, live participant/connection status, and shareable room links
 - Persistent light and dark appearance modes
+- Live polls, ranked Q&A, reactions, hand raising, and a producer moderator queue
+- Consent-based attendee profiles, interest matching, connection requests, and sponsor lead sharing
+- LiveKit webhook telemetry, operational recommendations, room recording, RTMP streaming, and replay publishing
+- Live captions from LiveKit transcription streams plus searchable transcript memory, summaries, and chapters
+- Accessibility preferences including caption language, reduced-data mode, reduced motion, keyboard navigation, and responsive layouts
 - Responsive, accessible UI and a generated Open Graph social card
 
 ## Run locally
@@ -42,10 +47,23 @@ CRM_AUTH_TOKEN=
 CALENDAR_WEBHOOK_URL=
 SLACK_WEBHOOK_URL=
 TEAMS_WEBHOOK_URL=
+RECORDING_S3_ACCESS_KEY=
+RECORDING_S3_SECRET=
+RECORDING_S3_BUCKET=
+RECORDING_S3_ENDPOINT=
+LIVEKIT_RTMP_URLS=
+MEMORY_GENERATION_WEBHOOK_URL=
+MEMORY_GENERATION_WEBHOOK_TOKEN=
 PRODUCER_EMAILS=producer@example.com
 ```
 
 `CRM_WEBHOOK_URL` is optional and can point to HubSpot, Salesforce, Zapier, Make, or an internal event-ingestion endpoint. Set `CRM_PROVIDER` to `hubspot`, `salesforce`, or `generic`. Calendar, Slack, and Teams adapters use their corresponding webhook URLs. In a hosted environment, bind a D1 database as `DB` and apply the migrations in `drizzle/`.
+
+For historical event intelligence, configure the LiveKit project webhook as
+`https://<your-host>/api/livekit-webhook`. Recording requires an S3-compatible
+destination and/or `LIVEKIT_RTMP_URLS`. Conference memory works without an AI
+provider by using a deterministic extractive summary; configure the optional
+private memory webhook only when transcript processing has been approved.
 
 Producer mode uses Supabase Google OAuth or email/password sign-in. Google must be enabled in the Supabase provider settings as described in the deployment guide. Grant producer access separately with Supabase `app_metadata.role` (`producer` or `admin`) or the optional comma-separated `PRODUCER_EMAILS` allowlist.
 
@@ -76,6 +94,8 @@ The deployed application also includes a user-facing guide at `/docs`, available
 - D1-backed attendee support requests and producer ticket lifecycle: complete
 - Explicit, isolated Live and Demo data modes: complete
 - Calendar, Slack/Teams, and HubSpot/Salesforce/generic CRM adapters: complete
+- Polls, Q&A, reactions, hand raising, networking, sponsor consent, captions, transcript search, replay publishing, and event intelligence: complete
+- LiveKit webhook ingestion and producer-controlled Egress recording/streaming: complete; provider destinations must be configured per deployment
 - Source, build, route contract, failure-path, responsive accessibility, and smoke-load checks: complete
 
 ## Remaining production hardening

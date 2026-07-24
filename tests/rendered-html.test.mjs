@@ -111,3 +111,43 @@ test("ships operator and maintainer documentation", async () => {
   assert.match(deployment, /Rollback/);
   assert.match(operations, /Rescue Mode/);
 });
+
+test("ships the attendee engagement and conference memory layer", async () => {
+  const [hub, experienceRoute, schema] = await Promise.all([
+    readFile(new URL("app/event-experience-hub.tsx", root), "utf8"),
+    readFile(new URL("app/api/experience/route.ts", root), "utf8"),
+    readFile(new URL("db/schema.ts", root), "utf8"),
+  ]);
+  assert.match(hub, /Polls & Q&amp;A/);
+  assert.match(hub, /Opt-in networking profile/);
+  assert.match(hub, /Search event transcript/);
+  assert.match(hub, /Reduced-data mode/);
+  assert.match(experienceRoute, /authenticateRequest/);
+  assert.match(experienceRoute, /sponsor-interest/);
+  assert.match(experienceRoute, /raise-hand/);
+  assert.match(schema, /sqliteTable\("attendee_profiles"/);
+  assert.match(schema, /sqliteTable\("engagement_items"/);
+  assert.match(schema, /sqliteTable\("transcript_segments"/);
+  assert.match(schema, /sqliteTable\("sponsor_booths"/);
+});
+
+test("ships verified telemetry, recording, streaming, and producer intelligence", async () => {
+  const [webhook, transcriptIngest, route, center, envExample] = await Promise.all([
+    readFile(new URL("app/api/livekit-webhook/route.ts", root), "utf8"),
+    readFile(new URL("app/api/transcript-ingest/route.ts", root), "utf8"),
+    readFile(new URL("app/api/producer/intelligence/route.ts", root), "utf8"),
+    readFile(new URL("app/producer-intelligence-center.tsx", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+  assert.match(webhook, /WebhookReceiver/);
+  assert.match(webhook, /externalId/);
+  assert.match(transcriptIngest, /TRANSCRIPT_INGEST_TOKEN/);
+  assert.match(transcriptIngest, /finalized transcript segments/);
+  assert.match(route, /startRoomCompositeEgress/);
+  assert.match(route, /StreamProtocol\.RTMP/);
+  assert.match(route, /generate-memory/);
+  assert.match(center, /VENUE INTELLIGENCE/);
+  assert.match(center, /Producer copilot/);
+  assert.match(envExample, /RECORDING_S3_BUCKET=/);
+  assert.match(envExample, /LIVEKIT_RTMP_URLS=/);
+});

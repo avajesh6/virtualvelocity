@@ -9,6 +9,8 @@ import {
   ShieldCheck,
   Users,
   Workflow,
+  Sparkles,
+  Captions,
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -35,7 +37,17 @@ const capabilities = [
   {
     icon: Database,
     title: "Durable operations",
-    text: "Store support requests, leads, incidents, audit events, and run-of-show state in Cloudflare D1 so operational history survives reloads and deployments.",
+    text: "Store support requests, engagement, networking consent, telemetry, transcripts, recordings, incidents, and run-of-show state in Cloudflare D1.",
+  },
+  {
+    icon: Sparkles,
+    title: "Venue intelligence",
+    text: "Turn verified LiveKit events into attendance history, producer recommendations, ranked Q&A, recording controls, and sponsor analytics.",
+  },
+  {
+    icon: Captions,
+    title: "Conference memory",
+    text: "Display LiveKit transcription streams, search finalized captions, publish replays, and generate summaries and chapters after each session.",
   },
 ];
 
@@ -48,6 +60,9 @@ const workflows = [
   ["Advance the show", "Select the next run-of-show item. The chosen item becomes live, preceding items become complete, and the change is written to D1."],
   ["Handle a disruption", "Activate Rescue Mode from Main Stage. Velocity Venue creates a backup room, moves participants, and writes an incident and audit entry."],
   ["Send an announcement", "The producer announcement action dispatches to configured Slack and Teams adapters and records the delivery outcome."],
+  ["Engage with a session", "Sign in to answer live polls, upvote questions, send reactions, raise your hand, or add a question to the moderator queue."],
+  ["Build your network", "Create an opt-in interest profile. Only discoverable attendees appear in suggestions, and sponsor contact details are shared only after explicit consent."],
+  ["Record and remember", "A producer can start LiveKit Egress, publish a replay, import finalized transcript segments, and generate a searchable conference memory."],
 ];
 
 export default function DocumentationPage() {
@@ -106,11 +121,13 @@ export default function DocumentationPage() {
           <div className="docs-section-title"><span>03</span><div><small>CONNECTED SERVICES</small><h2>Integration behavior</h2></div></div>
           <div className="docs-copy">
             <h3>LiveKit</h3>
-            <p>Provides device preview, real-time audio and video, participant layout, screen sharing, chat, participant administration, and room recovery. Browser clients receive short-lived room tokens; API credentials remain server-side.</p>
+            <p>Provides device preview, real-time media, captions, participant administration, signed event webhooks, room recovery, recording, and streaming. Browser clients receive short-lived room tokens; API credentials remain server-side.</p>
             <h3>Supabase</h3>
             <p>Authenticates accounts with Google OAuth or email/password. Authorization is enforced again on every protected server endpoint, independent of the sign-in method or what the interface displays.</p>
             <h3>Cloudflare D1</h3>
-            <p>Persists operational records. Live mode shows an explicit unavailable or empty state when D1 cannot be reached; it never substitutes demo records.</p>
+            <p>Persists operational records, engagement, attendee preferences, consent, telemetry, transcripts, and content metadata. Live mode never substitutes demo records.</p>
+            <h3>Recording and conference memory</h3>
+            <p>LiveKit Egress writes to configured S3-compatible or RTMP destinations. Transcript summaries stay local unless the operator explicitly configures an approved private generation service.</p>
             <h3>Calendar, Slack, Teams, and CRM</h3>
             <p>Webhook adapters remain inactive until their production URLs are configured. Missing adapters return an explicit “not configured” result instead of silently claiming delivery.</p>
           </div>

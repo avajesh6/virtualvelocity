@@ -21,8 +21,9 @@ Cloudflare Worker (vinext)
   |-- Static assets
   |-- Supabase token verification
   |-- LiveKit token and RoomService APIs
+  |-- LiveKit Webhook and Egress APIs
   |-- Cloudflare D1
-  `-- Calendar / Slack / Teams / CRM webhooks
+  `-- Calendar / Slack / Teams / CRM / optional memory webhooks
 ```
 
 ## Application boundaries
@@ -39,6 +40,9 @@ Cloudflare Worker (vinext)
 | Operational API | `app/api/producer/operations/route.ts` | Run-of-show, announcements, tickets, and audit history |
 | Integration API | `app/api/producer/integrations/route.ts` | Authenticated calendar and messaging dispatch |
 | Lead API | `app/api/leads/route.ts` | D1 lead persistence and CRM dispatch |
+| Experience API | `app/api/experience/route.ts` | Profiles, polls, Q&A, networking, sponsor consent, transcripts, and replay discovery |
+| Intelligence API | `app/api/producer/intelligence/route.ts` | Producer telemetry, moderation, recording, streaming, replays, and conference memory |
+| LiveKit webhook | `app/api/livekit-webhook/route.ts` | Signed, idempotent room/participant/track/Egress event ingestion |
 | Persistence | `db/` and `drizzle/` | D1 schema and migrations |
 | Worker entry point | `worker/index.ts` | Asset/image routing and app dispatch |
 
@@ -50,6 +54,17 @@ Cloudflare Worker (vinext)
 4. D1 is the source of truth for operational data. Live mode never falls back to sample records.
 5. Integration results distinguish unconfigured, failed, and delivered states.
 6. Demo mode is explicit, browser-local, and does not invoke live mutation endpoints.
+7. Networking is opt-in, sponsor sharing requires affirmative consent, and
+   transcript text leaves the application only when an operator configures the
+   optional private memory-generation endpoint.
+
+## Event intelligence flow
+
+1. LiveKit signs and sends room, participant, track, and Egress events to the webhook endpoint.
+2. The Worker verifies the signature and stores an idempotent telemetry record in D1.
+3. The control tower derives attendance, engagement, recording, and operational recommendations from persisted records.
+4. Producers can publish polls, moderate Q&A, start Egress, publish replay URLs, and generate conference memory.
+5. Attendees see only real persisted records in Live mode; empty systems render explicit empty states.
 
 ## Failure model
 

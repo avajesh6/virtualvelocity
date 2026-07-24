@@ -9,6 +9,7 @@ import {
   VideoConference,
   useConnectionState,
   useParticipants,
+  useTranscriptions,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
 import {
@@ -19,6 +20,7 @@ import {
   CalendarDays,
   Camera,
   CameraOff,
+  Captions,
   Check,
   ChevronRight,
   CircleHelp,
@@ -55,6 +57,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "./supabase-client";
 import { VENUE_ROOMS, type VenueRoomId } from "./venue-config";
+import { EventExperienceHub } from "./event-experience-hub";
+import { ProducerIntelligenceCenter } from "./producer-intelligence-center";
 
 type Role = "attendee" | "producer";
 type Theme = "dark" | "light";
@@ -290,6 +294,7 @@ export function ConferenceExperience() {
   useEffect(() => {
     const storedTheme = window.localStorage.getItem("velocity-theme");
     const storedMode = window.localStorage.getItem("velocity-mode");
+    const reducedData = window.localStorage.getItem("velocity-reduced-data") === "true";
     queueMicrotask(() => {
       setTheme(
         storedTheme === "light" || storedTheme === "dark"
@@ -298,6 +303,7 @@ export function ConferenceExperience() {
       );
       setMode(storedMode === "demo" ? "demo" : "live");
       setLocalHour(new Date().getHours());
+      if (reducedData) setCameraOn(false);
       setPreferencesReady(true);
     });
   }, []);
@@ -977,6 +983,15 @@ function AttendeeView({
             );
           })}
         </div>
+
+        <EventExperienceHub
+          mode={mode}
+          accessToken={accessToken}
+          room={room}
+          signedIn={Boolean(appUser)}
+          requestSignIn={requestSignIn}
+          notify={notify}
+        />
       </section>
 
       <aside className="right-rail">
@@ -1177,6 +1192,7 @@ function ConnectedLiveRoom({
   notify: (message: string) => void;
   leave: () => void;
 }) {
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const copyInvite = async () => {
     const roomId = VENUE_ROOMS.find((room) => room.roomName === connection.roomName)?.id ?? "stage";
     const invite = `${window.location.origin}/?room=${roomId}`;
@@ -1209,16 +1225,37 @@ function ConnectedLiveRoom({
           <ConferenceRoomMeta />
           <div className="live-room-actions">
             <button className="live-header-action" type="button" onClick={() => void copyInvite()}><Link2 size={16} />Invite</button>
+            <button className="live-header-action" type="button" aria-pressed={captionsEnabled} onClick={() => setCaptionsEnabled((enabled) => !enabled)}><Captions size={16} />Captions</button>
             <button className="live-header-icon" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button className="leave-room-button" onClick={leave}><X size={18} />Leave room</button>
           </div>
         </header>
-        <div className="live-room-conference"><VideoConference /></div>
+        <div className="live-room-conference">
+          <VideoConference />
+          {captionsEnabled && <LiveCaptions />}
+        </div>
         <RoomAudioRenderer />
         <StartAudio label="Enable room audio" />
       </LiveKitRoom>
+    </div>
+  );
+}
+
+function LiveCaptions() {
+  // LiveKit transcription streams are emitted by the room's transcription
+  // agent. The venue displays only provider-delivered text and never invents
+  // captions when the stream is absent.
+  const transcriptions = useTranscriptions();
+  const visible = transcriptions.slice(-3);
+  return (
+    <div className={`live-captions ${visible.length ? "active" : ""}`} aria-live="polite" aria-label="Live captions">
+      {visible.length
+        ? visible.map((segment, index) => (
+          <p key={`${segment.streamInfo.id}-${index}`}><strong>{segment.participantInfo.identity}</strong>{segment.text}</p>
+        ))
+        : <p><Captions size={15} /> Captions are ready and will appear when the room transcription service publishes text.</p>}
     </div>
   );
 }
@@ -1533,6 +1570,7 @@ function ProducerView({
         <button className={`producer-nav-item ${producerSection === "speakers" ? "active" : ""}`} onClick={() => openProducerSection("speakers", "producer-participants")}><Users size={18} />Speakers</button>
         <button className={`producer-nav-item ${producerSection === "engagement" ? "active" : ""}`} onClick={() => openProducerSection("engagement", "producer-activity")}><MessageSquareText size={18} />Engagement</button>
         <button className={`producer-nav-item ${producerSection === "data" ? "active" : ""}`} onClick={() => openProducerSection("data", "producer-metrics")}><Gauge size={18} />Event data</button>
+        <button className={`producer-nav-item ${producerSection === "intelligence" ? "active" : ""}`} onClick={() => openProducerSection("intelligence", "producer-intelligence")}><Sparkles size={18} />Intelligence</button>
         <div className="nav-divider" />
         <button className={`producer-nav-item ${producerSection === "support" ? "active" : ""}`} onClick={() => openProducerSection("support", "producer-support")}><LifeBuoy size={18} />Support queue <span>{openTickets.length}</span></button>
         <div className="event-health"><div><HeartPulse size={17} /><span>EVENT SERVICES</span></div><strong>{mode === "demo" ? "DEMO" : venueSnapshot?.mediaAvailable && operationsStatus === "ready" ? "READY" : "CHECK"}</strong><small>{mode === "demo" ? "No live systems affected" : venueSnapshot?.mediaAvailable ? operationsStatus === "ready" ? "Media and operations connected" : "Operations data unavailable" : venueSnapshot?.mediaError ?? "Checking services"}</small></div>
@@ -1558,6 +1596,8 @@ function ProducerView({
           <MetricCard label="OPEN SUPPORT" value={String(openTickets.length)} change={mode === "demo" ? "Demo tickets" : "Persisted D1 tickets"} icon={LifeBuoy} tone="coral" />
           <MetricCard label="RECORDED ACTIONS" value={String(mode === "demo" ? events.length : persistentEvents.length)} change={mode === "demo" ? "Demo activity" : "D1 audit records loaded"} icon={Activity} tone="lime" />
         </div>
+
+        <ProducerIntelligenceCenter mode={mode} accessToken={accessToken} notify={notify} />
 
         <div className="command-grid">
           <section className="panel run-panel scroll-target" id="producer-run-show">

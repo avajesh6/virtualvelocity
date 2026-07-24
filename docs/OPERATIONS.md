@@ -15,6 +15,11 @@
 8. Create an attendee support request and verify assignment and resolution in Producer mode.
 9. Send test calendar, Slack, Teams, and CRM requests only to approved test endpoints.
 10. Confirm a backup room can be created and that the event team understands Rescue Mode.
+11. Confirm the LiveKit webhook has produced room and participant events in Venue Intelligence.
+12. Publish a test poll, answer it as an attendee, submit and moderate a question, and test hand raising.
+13. Verify networking discoverability is opt-in and sponsor lead sharing records explicit consent.
+14. Confirm captions appear from the approved transcription agent and test the chosen caption languages.
+15. Start and stop a rehearsal recording, validate its destination, publish a replay, and generate conference memory.
 
 ## During an event
 
@@ -23,6 +28,10 @@
 - Use persisted announcements for venue-wide information.
 - Treat a “not configured” adapter message differently from a delivery failure.
 - Do not repeatedly activate Rescue Mode. Once started, allow LiveKit movement and incident logging to complete.
+- Monitor Venue Intelligence recommendations alongside LiveKit's current room
+  state. Recommendations are operational prompts, not automatic destructive actions.
+- Confirm recording and transcription consent before starting capture.
+- Close completed questions and polls so attendee controls accurately reflect the moderator state.
 
 ## Rescue Mode
 
@@ -76,10 +85,29 @@ Sign out and sign in again after changing role metadata.
 - A `502` means a configured provider rejected or failed the request.
 - Check the audit trail for the channel and recorded delivery state.
 
+### Venue Intelligence has no history
+
+- Confirm LiveKit points to `/api/livekit-webhook` on the production host.
+- Confirm `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` match the webhook-signing project.
+- Trigger a rehearsal join and inspect the protected intelligence endpoint.
+
+### Recording cannot start
+
+- Configure an S3-compatible destination and/or `LIVEKIT_RTMP_URLS`.
+- Confirm the LiveKit plan and project permit Egress.
+- Verify the destination credentials can create objects in the configured bucket.
+
+### Captions are ready but no text appears
+
+- The interface never fabricates captions. Confirm the LiveKit transcription
+  agent is connected and publishes transcription text streams.
+- Confirm the attendee selected a language the agent produces.
+
 ## After an event
 
-1. Export or inspect leads, incidents, and audit events.
+1. Export or inspect consented sponsor interactions, engagement, telemetry, leads, incidents, and audit events.
 2. Review recovery duration and participant impact.
 3. Rotate temporary provider credentials when required.
 4. Record follow-up engineering work separately from the immutable event audit trail.
 5. Connect the custom domain only after the test submission phase, as documented in the project TODO.
+6. Publish verified replay URLs, generate conference memory, and apply the event's transcript and recording retention policy.

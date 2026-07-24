@@ -22,6 +22,20 @@
       "when": 1784903905047,
       "tag": "0002_cynical_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784911137990,
+      "tag": "0003_zippy_doorman",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784911485395,
+      "tag": "0004_outstanding_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

@@ -33,8 +33,31 @@ Connecting a custom domain remains the final launch TODO.
 | `CALENDAR_WEBHOOK_URL` | Optional | Yes | Calendar adapter endpoint |
 | `SLACK_WEBHOOK_URL` | Optional | Yes | Slack incoming webhook |
 | `TEAMS_WEBHOOK_URL` | Optional | Yes | Teams webhook endpoint |
+| `RECORDING_S3_ACCESS_KEY` | Recording | Yes | S3-compatible recording access key |
+| `RECORDING_S3_SECRET` | Recording | Yes | S3-compatible recording secret |
+| `RECORDING_S3_BUCKET` | Recording | No | Recording destination bucket |
+| `RECORDING_S3_ENDPOINT` | Optional | No | Custom S3-compatible endpoint, including R2 |
+| `RECORDING_S3_REGION` | Optional | No | Destination region; defaults to `auto` |
+| `RECORDING_S3_FORCE_PATH_STYLE` | Optional | No | Enable path-style S3 addressing |
+| `LIVEKIT_RTMP_URLS` | Optional | Yes | Comma-separated RTMP stream destinations |
+| `MEMORY_GENERATION_WEBHOOK_URL` | Optional | Yes | Approved private transcript-summary service |
+| `MEMORY_GENERATION_WEBHOOK_TOKEN` | Optional | Yes | Bearer token for the memory service |
+| `TRANSCRIPT_INGEST_TOKEN` | Captions | Yes | Shared credential for the approved transcription agent |
 
 Never commit real secret values. `.env.example` documents names only.
+
+## LiveKit webhooks, captions, and Egress
+
+1. Configure the LiveKit project webhook URL as
+   `https://virtualvelocity.avajesh6.workers.dev/api/livekit-webhook`.
+2. Keep webhook signing enabled; the application rejects unsigned events.
+3. Connect a LiveKit transcription agent to rooms where captions and searchable
+   transcripts are required. Configure it to send finalized segments to
+   `/api/transcript-ingest` with `TRANSCRIPT_INGEST_TOKEN`.
+4. Configure at least one S3-compatible destination or RTMP URL before using
+   the producer recording control.
+5. Test recording and streaming in a rehearsal room, then publish a replay URL
+   only after verifying access controls and attendee consent.
 
 ## Google sign-in configuration
 

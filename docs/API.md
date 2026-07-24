@@ -26,6 +26,19 @@ Returns current LiveKit participant totals for all venue rooms, the persisted
 agenda, recent producer announcements, and explicit media/schedule availability.
 It never returns Demo-mode samples.
 
+### `POST /api/livekit-webhook`
+
+Receives LiveKit room, participant, track, and Egress webhooks. Requests must
+carry a valid LiveKit signature. Delivery is idempotent using the provider event
+id; retries return success without creating duplicate telemetry.
+
+### `POST /api/transcript-ingest`
+
+Allows an approved transcription agent to persist finalized caption segments.
+It uses a dedicated bearer credential (`TRANSCRIPT_INGEST_TOKEN`), accepts only
+allowlisted venue rooms, ignores partial hypotheses, and limits each request to
+500 segments.
+
 ### `POST /api/leads`
 
 Persists expo interest and optionally forwards it to a CRM adapter.
@@ -65,6 +78,18 @@ Creates a persisted producer support ticket using the verified account identity:
 ```json
 { "room": "velocity-venue-stage", "issue": "My microphone is not detected." }
 ```
+
+### `GET /api/experience`
+
+Returns published polls and Q&A, vote totals, replays, transcript segments,
+sponsor booths, and—when signed in—the attendee's private networking profile,
+matches, and outgoing connection requests.
+
+### `POST /api/experience`
+
+Authenticated attendee actions include `save-profile`, `ask-question`, `vote`,
+`answer-poll`, `reaction`, `raise-hand`, `request-connection`, and
+`sponsor-interest`. Sponsor sharing requires `consent: true`.
 
 ### `GET /api/producer/room?room=<room-name>`
 
@@ -140,6 +165,27 @@ Dispatches an authenticated operational message.
 ```
 
 `channel` may be `calendar`, `slack`, or `teams`.
+
+### `GET /api/producer/intelligence`
+
+Returns webhook-derived attendance history, engagement totals, open moderator
+items, sponsor opt-ins, transcript coverage, Egress jobs, replay assets, and
+rule-based producer recommendations.
+
+### `POST /api/producer/intelligence`
+
+Producer actions include:
+
+- `create-poll` and `close-item`
+- `start-recording` and `stop-recording`
+- `publish-replay`
+- `import-transcript` and `generate-memory`
+- `publish-sponsor`
+
+Recording starts a LiveKit room-composite Egress and uses the configured
+S3-compatible and/or RTMP destinations. Conference memory uses the configured
+private generation endpoint when present, otherwise it produces a local
+extractive summary without transferring transcript text.
 
 ## Error conventions
 
