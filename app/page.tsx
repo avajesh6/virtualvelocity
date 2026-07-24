@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { ConferenceExperience } from "./conference-experience";
 
-export const dynamic = "force-dynamic";
-
 export const metadata: Metadata = {
   title: "Velocity Venue — Live Video Conferences",
   description:
