@@ -18,6 +18,7 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(experience, /LiveKitRoom/);
   assert.match(experience, /VideoConference/);
   assert.match(experience, /PreJoin/);
+  assert.match(experience, /persistUserChoices=\{false\}/);
   assert.match(experience, /useConnectionState/);
   assert.match(experience, /useParticipants/);
   assert.match(experience, /velocity-theme/);
@@ -50,6 +51,8 @@ test("keeps third-party credentials server-side", async () => {
   assert.match(producerRoute, /authorizeProducerRequest/);
   assert.match(producerRoute, /moveParticipant/);
   assert.match(producerRoute, /mutePublishedTrack/);
+  assert.match(producerRoute, /requested room does not exist/);
+  assert.match(producerRoute, /participants: \[\]/);
   assert.match(envExample, /PRODUCER_EMAILS=/);
 });
 

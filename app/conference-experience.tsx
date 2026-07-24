@@ -905,7 +905,10 @@ function LiveJoinDialog({
           micLabel="Microphone"
           camLabel="Camera"
           userLabel="Display name"
-          persistUserChoices
+          // The venue's microphone and camera controls are the explicit source
+          // of truth for each lobby opening; selected device IDs still flow into
+          // the active LiveKit connection after the attendee joins.
+          persistUserChoices={false}
           onValidate={(choices) => Boolean(choices.username.trim()) && !joining}
           onSubmit={(choices) => void connect(choices)}
           onError={(joinError) => console.warn("Media preview unavailable", joinError)}

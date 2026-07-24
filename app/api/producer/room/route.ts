@@ -50,7 +50,17 @@ export async function GET(request: Request) {
         };
       }),
     }, { headers: { "cache-control": "no-store" } });
-  } catch {
+  } catch (error) {
+    // LiveKit returns 404 until the first participant creates the room. That is
+    // a healthy empty-room state, not an operational outage.
+    const liveKitError = error as { code?: string; status?: number; message?: string };
+    if (
+      liveKitError.status === 404
+      || liveKitError.code === "not_found"
+      || liveKitError.message?.includes("requested room does not exist")
+    ) {
+      return Response.json({ participants: [] }, { headers: { "cache-control": "no-store" } });
+    }
     return Response.json({ error: "The LiveKit room could not be read." }, { status: 502 });
   }
 }
