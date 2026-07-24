@@ -1,5 +1,6 @@
 import { getDb } from "../../../db";
 import { leads } from "../../../db/schema";
+import { dispatchCrmLead } from "../../integrations";
 
 type LeadPayload = {
   name?: string;
@@ -33,16 +34,17 @@ export async function POST(request: Request) {
     // Local preview remains usable before a D1 migration is applied.
   }
 
-  const webhookUrl = process.env.CRM_WEBHOOK_URL;
-  let routed = false;
-  if (webhookUrl) {
-    const webhookResponse = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "velocity-venue", ...payload, capturedAt: new Date().toISOString() }),
-    });
-    routed = webhookResponse.ok;
-  }
+  const crm = await dispatchCrmLead({
+    source: "velocity-venue",
+    ...payload,
+    capturedAt: new Date().toISOString(),
+  });
 
-  return Response.json({ ok: true, mode: webhookUrl ? "connected" : "demo", persisted, routed }, { status: 201 });
+  return Response.json({
+    ok: true,
+    mode: crm.configured ? "connected" : "demo",
+    persisted,
+    routed: crm.delivered,
+    provider: crm.provider,
+  }, { status: 201 });
 }

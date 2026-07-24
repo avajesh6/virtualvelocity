@@ -22,3 +22,25 @@ export const incidents = sqliteTable("incidents", {
   recoverySeconds: integer("recovery_seconds"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const auditEvents = sqliteTable("audit_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventName: text("event_name").notNull(),
+  actorEmail: text("actor_email").notNull(),
+  action: text("action").notNull(),
+  target: text("target").notNull().default(""),
+  detail: text("detail").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const runOfShowItems = sqliteTable("run_of_show_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventName: text("event_name").notNull(),
+  position: integer("position").notNull(),
+  scheduledTime: text("scheduled_time").notNull(),
+  title: text("title").notNull(),
+  owner: text("owner").notNull(),
+  status: text("status").notNull().default("queued"),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

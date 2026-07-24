@@ -11,7 +11,7 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   name: "virtualvelocity",
   main: "./worker/index.ts",
-  compatibility_date: "2026-07-24",
+  compatibility_date: "2026-05-22",
   compatibility_flags: ["nodejs_compat"],
   vars: {
     NEXT_PUBLIC_LIVEKIT_URL:

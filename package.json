@@ -11,6 +11,7 @@
     "start": "vinext start",
     "deploy:cloudflare": "npm run build && wrangler deploy",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test:live": "node --test tests/live-http.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

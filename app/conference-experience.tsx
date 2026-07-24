@@ -32,7 +32,6 @@ import {
   MonitorUp,
   MoreHorizontal,
   Radio,
-  Search,
   Send,
   ShieldCheck,
   Sparkles,
@@ -52,6 +51,19 @@ type RoomId = "stage" | "studio" | "expo" | "lounge";
 type LiveConnection = { token: string; serverUrl: string; roomName: string };
 type ProducerUser = { displayName: string; email: string; role: Role };
 type ManagedParticipant = { identity: string; name: string; audioTrackSid: string | null; audioMuted: boolean };
+type RunOfShowItem = {
+  id?: number;
+  scheduledTime: string;
+  title: string;
+  owner: string;
+  status: string;
+};
+type OperationalEvent = {
+  id?: number;
+  createdAt?: string;
+  detail: string;
+  action?: string;
+};
 
 const rooms = [
   {
@@ -154,7 +166,7 @@ export function ConferenceExperience() {
   const [leadSent, setLeadSent] = useState(false);
   const [leadSending, setLeadSending] = useState(false);
   const [rescueState, setRescueState] = useState<"idle" | "moving" | "complete">("idle");
-  const [activeRos, setActiveRos] = useState(2);
+  const [, setActiveRos] = useState(2);
   const [events, setEvents] = useState(initialEvents);
   const [liveDialogOpen, setLiveDialogOpen] = useState(false);
   const [liveName, setLiveName] = useState("Alex Morgan");
@@ -173,7 +185,7 @@ export function ConferenceExperience() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
-      setAuthReady(true);
+      queueMicrotask(() => setAuthReady(true));
       return;
     }
 
@@ -434,7 +446,6 @@ export function ConferenceExperience() {
           rescueState={rescueState}
           triggerRescue={triggerRescue}
           resetDemo={resetDemo}
-          activeRos={activeRos}
           setActiveRos={setActiveRos}
           events={events}
           notify={setNotice}
@@ -752,7 +763,6 @@ function ProducerView({
   rescueState,
   triggerRescue,
   resetDemo,
-  activeRos,
   setActiveRos,
   events,
   notify,
@@ -762,7 +772,6 @@ function ProducerView({
   rescueState: "idle" | "moving" | "complete";
   triggerRescue: () => void;
   resetDemo: () => void;
-  activeRos: number;
   setActiveRos: (index: number) => void;
   events: { time: string; text: string; tone: string }[];
   notify: (message: string) => void;
@@ -771,6 +780,29 @@ function ProducerView({
 }) {
   const [managedParticipants, setManagedParticipants] = useState<ManagedParticipant[]>([]);
   const [participantStatus, setParticipantStatus] = useState<"loading" | "ready" | "demo" | "error">("loading");
+  const [persistentRunOfShow, setPersistentRunOfShow] = useState<RunOfShowItem[]>(
+    runOfShow.map((item) => ({ ...item, scheduledTime: item.time })),
+  );
+  const [persistentEvents, setPersistentEvents] = useState<OperationalEvent[]>([]);
+
+  const refreshOperations = async () => {
+    try {
+      const response = await fetch("/api/producer/operations", {
+        cache: "no-store",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      const payload = await response.json() as {
+        runOfShow?: RunOfShowItem[];
+        activity?: OperationalEvent[];
+      };
+      if (response.ok) {
+        if (payload.runOfShow?.length) setPersistentRunOfShow(payload.runOfShow);
+        setPersistentEvents(payload.activity ?? []);
+      }
+    } catch {
+      // The producer dashboard retains its demo data when D1 is unavailable.
+    }
+  };
 
   const refreshParticipants = async () => {
     setParticipantStatus("loading");
@@ -793,8 +825,62 @@ function ProducerView({
   };
 
   useEffect(() => {
-    void refreshParticipants();
+    const timer = window.setTimeout(() => {
+      void refreshParticipants();
+      void refreshOperations();
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // These loaders intentionally run once when the authenticated producer view opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectRunItem = async (index: number, item: RunOfShowItem) => {
+    setActiveRos(index);
+    setPersistentRunOfShow((current) => current.map((candidate, candidateIndex) => ({
+      ...candidate,
+      status: candidateIndex < index ? "done" : candidateIndex === index ? "live" : candidateIndex === index + 1 ? "next" : "queued",
+    })));
+    if (!item.id) {
+      notify("Run of show advanced in demo mode.");
+      return;
+    }
+    const response = await fetch("/api/producer/operations", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ action: "set-run-status", itemId: item.id, status: "live" }),
+    });
+    notify(response.ok ? "Run-of-show change saved." : "Run-of-show change is visible but could not be saved.");
+    if (response.ok) await refreshOperations();
+  };
+
+  const sendIntegration = async (channel: "calendar" | "slack" | "teams", message: string) => {
+    const response = await fetch("/api/producer/integrations", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        channel,
+        message,
+        roomName: "Main Stage",
+        startsAt: "2026-07-31T11:00:00Z",
+        endsAt: "2026-07-31T12:00:00Z",
+      }),
+    });
+    const payload = await response.json() as { configured?: boolean };
+    notify(
+      response.ok
+        ? `${channel === "calendar" ? "Calendar" : channel === "slack" ? "Slack" : "Teams"} update delivered.`
+        : payload.configured === false
+          ? `${channel === "calendar" ? "Calendar" : channel === "slack" ? "Slack" : "Teams"} is ready to connect in environment settings.`
+          : "The integration could not be reached.",
+    );
+    await refreshOperations();
+  };
 
   const manageParticipant = async (action: "remove" | "mute", participant: ManagedParticipant) => {
     const response = await fetch("/api/producer/room", {
@@ -831,7 +917,7 @@ function ProducerView({
       <section className="command-content">
         <div className="command-heading">
           <div><span className="eyebrow"><Radio size={13} /> SHOW IS LIVE · SIGNED IN</span><h1>Good morning, {producerUser.displayName.split(" ")[0]}.</h1><p>You’re 24 minutes into the program. Everything is on time.</p></div>
-          <div className="command-actions"><button className="secondary-button" onClick={() => notify("Announcement sent to all attendees.")}><Bell size={16} />Send announcement</button><button className="primary-button"><ExternalLink size={15} />Open attendee view</button></div>
+          <div className="command-actions"><button className="secondary-button" onClick={() => void Promise.all([sendIntegration("slack", "Global Innovation Summit: producer announcement from Main Stage."), sendIntegration("teams", "Global Innovation Summit: producer announcement from Main Stage.")])}><Bell size={16} />Send announcement</button><button className="secondary-button" onClick={() => void sendIntegration("calendar", "Global Innovation Summit — Main Stage")}><CalendarDays size={15} />Sync calendar</button><button className="primary-button" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink size={15} />Open attendee view</button></div>
         </div>
 
         {rescueState !== "idle" && (
@@ -853,9 +939,9 @@ function ProducerView({
           <section className="panel run-panel">
             <div className="panel-head"><div><span className="eyebrow">LIVE CONTROL</span><h2>Run of show</h2></div><span className="on-time"><Check size={13} />ON TIME</span></div>
             <div className="ros-list">
-              {runOfShow.map((item, index) => (
-                <button key={item.time} className={`ros-item ${index === activeRos ? "active" : ""} ${index < activeRos ? "done" : ""}`} onClick={() => setActiveRos(index)}>
-                  <span className="ros-time">{item.time}</span><span className="ros-line"><i /></span><span className="ros-copy"><strong>{item.title}</strong><small>{item.owner}</small></span><span className="ros-status">{index < activeRos ? <Check size={14} /> : index === activeRos ? "LIVE" : item.status === "next" ? "NEXT" : ""}</span>
+              {persistentRunOfShow.map((item, index) => (
+                <button key={item.id ?? item.scheduledTime} className={`ros-item ${item.status === "live" ? "active" : ""} ${item.status === "done" ? "done" : ""}`} onClick={() => void selectRunItem(index, item)}>
+                  <span className="ros-time">{item.scheduledTime}</span><span className="ros-line"><i /></span><span className="ros-copy"><strong>{item.title}</strong><small>{item.owner}</small></span><span className="ros-status">{item.status === "done" ? <Check size={14} /> : item.status === "live" ? "LIVE" : item.status === "next" ? "NEXT" : ""}</span>
                 </button>
               ))}
             </div>
@@ -893,7 +979,11 @@ function ProducerView({
         <div className="bottom-grid">
           <section className="panel activity-panel">
             <div className="panel-head"><div><span className="eyebrow">OPERATIONAL RECORD</span><h2>Event activity</h2></div><button className="text-button">View incident log <ChevronRight size={15} /></button></div>
-            <div className="event-list">{events.slice(0, 4).map((event, index) => <div className="event-row" key={`${event.time}-${index}`}><span>{event.time}</span><i className={event.tone} /><strong>{event.text}</strong></div>)}</div>
+            <div className="event-list">
+              {persistentEvents.length > 0
+                ? persistentEvents.slice(0, 4).map((event, index) => <div className="event-row" key={event.id ?? index}><span>{event.createdAt ? new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "NOW"}</span><i className={event.action?.includes("rescue") ? "warn" : "good"} /><strong>{event.detail || event.action}</strong></div>)
+                : events.slice(0, 4).map((event, index) => <div className="event-row" key={`${event.time}-${index}`}><span>{event.time}</span><i className={event.tone} /><strong>{event.text}</strong></div>)}
+            </div>
           </section>
           <section className="panel support-panel">
             <div className="panel-head"><div><span className="eyebrow">NEEDS ATTENTION</span><h2>Support queue</h2></div><span className="queue-count">2 OPEN</span></div>

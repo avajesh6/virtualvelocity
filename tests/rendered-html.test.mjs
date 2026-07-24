@@ -34,18 +34,40 @@ test("keeps third-party credentials server-side", async () => {
   assert.match(tokenRoute, /global-innovation-/);
   assert.match(envExample, /LIVEKIT_API_KEY=/);
   assert.match(envExample, /CRM_WEBHOOK_URL=/);
-  assert.match(producerRoute, /getChatGPTUser/);
+  assert.match(producerRoute, /authorizeProducerRequest/);
   assert.match(producerRoute, /moveParticipant/);
   assert.match(producerRoute, /mutePublishedTrack/);
   assert.match(envExample, /PRODUCER_EMAILS=/);
 });
 
 test("defines durable lead and incident records", async () => {
-  const [schema, hosting] = await Promise.all([
+  const [schema, hosting, operationsRoute] = await Promise.all([
     readFile(new URL("db/schema.ts", root), "utf8"),
     readFile(new URL(".openai/hosting.json", root), "utf8"),
+    readFile(new URL("app/api/producer/operations/route.ts", root), "utf8"),
   ]);
   assert.match(schema, /sqliteTable\("leads"/);
   assert.match(schema, /sqliteTable\("incidents"/);
+  assert.match(schema, /sqliteTable\("audit_events"/);
+  assert.match(schema, /sqliteTable\("run_of_show_items"/);
+  assert.match(operationsRoute, /authorizeProducerRequest/);
+  assert.match(operationsRoute, /set-run-status/);
   assert.equal(JSON.parse(hosting).d1, "DB");
+});
+
+test("provides calendar, team messaging, and CRM adapters", async () => {
+  const [integrations, producerIntegrationRoute, leadsRoute, envExample] = await Promise.all([
+    readFile(new URL("app/integrations.ts", root), "utf8"),
+    readFile(new URL("app/api/producer/integrations/route.ts", root), "utf8"),
+    readFile(new URL("app/api/leads/route.ts", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+  assert.match(integrations, /CALENDAR_WEBHOOK_URL/);
+  assert.match(integrations, /SLACK_WEBHOOK_URL/);
+  assert.match(integrations, /TEAMS_WEBHOOK_URL/);
+  assert.match(integrations, /hubspot/);
+  assert.match(integrations, /salesforce/);
+  assert.match(producerIntegrationRoute, /authorizeProducerRequest/);
+  assert.match(leadsRoute, /dispatchCrmLead/);
+  assert.match(envExample, /CRM_PROVIDER=/);
 });

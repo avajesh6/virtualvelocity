@@ -1,4 +1,7 @@
 import { RoomServiceClient, TrackType } from "livekit-server-sdk";
+import { eq } from "drizzle-orm";
+import { getDb } from "../../../../db";
+import { auditEvents, incidents } from "../../../../db/schema";
 import { authorizeProducerRequest } from "../../../producer-auth";
 
 const SOURCE_ROOMS = new Set([
@@ -64,6 +67,19 @@ export async function POST(request: Request) {
 
   try {
     if (body.action === "rescue") {
+      let incidentId: number | undefined;
+      try {
+        const created = await getDb().insert(incidents).values({
+          eventName: "Global Innovation Summit 2026",
+          roomName: body.room,
+          kind: "room-recovery",
+          status: "active",
+        }).returning({ id: incidents.id });
+        incidentId = created[0]?.id;
+      } catch {
+        // Live recovery must remain available if incident persistence is unavailable.
+      }
+      const startedAt = Date.now();
       const backupRoom = `${body.room}-backup`;
       await client.createRoom({ name: backupRoom, emptyTimeout: 15 * 60 });
       const participants = await client.listParticipants(body.room);
@@ -71,16 +87,53 @@ export async function POST(request: Request) {
         participants.map((participant) => client.moveParticipant(body.room!, participant.identity, backupRoom)),
       );
       const moved = results.filter((result) => result.status === "fulfilled").length;
+      try {
+        const db = getDb();
+        if (incidentId) {
+          await db.update(incidents).set({
+            status: "resolved",
+            attendeesAffected: participants.length,
+            recoverySeconds: Math.max(1, Math.round((Date.now() - startedAt) / 1000)),
+          }).where(eq(incidents.id, incidentId));
+        }
+        await db.insert(auditEvents).values({
+          eventName: "Global Innovation Summit 2026",
+          actorEmail: auth.user.email,
+          action: "room.rescue",
+          target: body.room,
+          detail: JSON.stringify({ moved, destination: backupRoom }),
+        });
+      } catch {
+        // The completed LiveKit action is authoritative even if audit storage is unavailable.
+      }
       return Response.json({ ok: true, moved, destination: backupRoom });
     }
 
     if (!body.identity?.trim()) return Response.json({ error: "Participant identity is required." }, { status: 400 });
     if (body.action === "remove") {
       await client.removeParticipant(body.room, body.identity.trim());
+      try {
+        await getDb().insert(auditEvents).values({
+          eventName: "Global Innovation Summit 2026",
+          actorEmail: auth.user.email,
+          action: "participant.removed",
+          target: body.identity.trim(),
+          detail: body.room,
+        });
+      } catch {}
       return Response.json({ ok: true });
     }
     if (body.action === "mute" && body.trackSid?.trim()) {
       await client.mutePublishedTrack(body.room, body.identity.trim(), body.trackSid.trim(), true);
+      try {
+        await getDb().insert(auditEvents).values({
+          eventName: "Global Innovation Summit 2026",
+          actorEmail: auth.user.email,
+          action: "participant.muted",
+          target: body.identity.trim(),
+          detail: body.room,
+        });
+      } catch {}
       return Response.json({ ok: true });
     }
     return Response.json({ error: "Unsupported producer action." }, { status: 400 });

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Velocity Venue — Global Innovation Summit",
   description:
-    "A resilient virtual conference venue and producer command center by Virtual Velocity.",
+    "A resilient virtual conference venue and producer command center.",
 };
 
 export default async function Home() {
