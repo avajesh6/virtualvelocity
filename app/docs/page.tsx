@@ -25,7 +25,7 @@ const capabilities = [
   {
     icon: Radio,
     title: "Producer command",
-    text: "Monitor live participants, mute or remove disruptive attendees, advance the run of show, send cues, and coordinate external channels.",
+    text: "Monitor live participants, mute or remove disruptive attendees, publish and advance the run of show, send announcements, and resolve attendee support requests.",
   },
   {
     icon: ShieldCheck,
@@ -35,7 +35,7 @@ const capabilities = [
   {
     icon: Database,
     title: "Durable operations",
-    text: "Store leads, incidents, audit events, and run-of-show state in Cloudflare D1 so operational history survives reloads and deployments.",
+    text: "Store support requests, leads, incidents, audit events, and run-of-show state in Cloudflare D1 so operational history survives reloads and deployments.",
   },
 ];
 
@@ -43,6 +43,7 @@ const workflows = [
   ["Join an event", "Choose a venue space, select Join live room, preview your camera, choose your microphone and camera, then enter the room."],
   ["Run a video conference", "Use the participant grid, pin speakers, share your screen, exchange live chat messages, copy an invite link, and monitor connection status from the conference header."],
   ["Choose an appearance", "Use the sun or moon control to switch between light and dark modes. Velocity Venue remembers the preference on this device."],
+  ["Choose a data mode", "Live mode uses LiveKit and D1 only. Demo mode is clearly labelled and uses isolated sample data without changing live systems."],
   ["Open producer mode", "Sign in with an authorized Supabase account. Producer access requires an app role or an address on the producer allowlist."],
   ["Advance the show", "Select the next run-of-show item. The chosen item becomes live, preceding items become complete, and the change is written to D1."],
   ["Handle a disruption", "Activate Rescue Mode from Main Stage. Velocity Venue creates a backup room, moves participants, and writes an incident and audit entry."],
@@ -109,7 +110,7 @@ export default function DocumentationPage() {
             <h3>Supabase</h3>
             <p>Authenticates accounts with Google OAuth or email/password. Authorization is enforced again on every protected server endpoint, independent of the sign-in method or what the interface displays.</p>
             <h3>Cloudflare D1</h3>
-            <p>Persists operational records. The venue continues with clearly labelled demo data when a local preview has no database binding.</p>
+            <p>Persists operational records. Live mode shows an explicit unavailable or empty state when D1 cannot be reached; it never substitutes demo records.</p>
             <h3>Calendar, Slack, Teams, and CRM</h3>
             <p>Webhook adapters remain inactive until their production URLs are configured. Missing adapters return an explicit “not configured” result instead of silently claiming delivery.</p>
           </div>
@@ -130,7 +131,7 @@ export default function DocumentationPage() {
       <section className="docs-section" id="resilience">
         <div className="docs-section-title"><span>04</span><div><small>OPERATIONS</small><h2>Failure and recovery</h2></div></div>
         <div className="docs-status-grid">
-          <article><HeartPulse size={19} /><div><h3>LiveKit unavailable</h3><p>Attendees remain inside the venue shell and receive a clear availability message. Producer controls display demo status.</p></div></article>
+          <article><HeartPulse size={19} /><div><h3>LiveKit unavailable</h3><p>Attendees remain inside the venue shell and receive a clear availability message. Live mode never displays fabricated room counts.</p></div></article>
           <article><Database size={19} /><div><h3>D1 unavailable</h3><p>Live media administration continues. Persistence endpoints return a service-unavailable response so the interface never reports a false save.</p></div></article>
           <article><ShieldCheck size={19} /><div><h3>Integration unavailable</h3><p>The adapter reports whether it is unconfigured or failed. The operational record captures delivery state when D1 is available.</p></div></article>
         </div>

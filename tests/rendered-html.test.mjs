@@ -24,8 +24,11 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(experience, /velocity-theme/);
   assert.match(experience, /Conference invite copied/);
   assert.match(experience, /Notifications marked as read/);
-  assert.match(experience, /Connection request sent to Noor Patel/);
+  assert.match(experience, /Demo connection request sent/);
   assert.match(experience, /sendChatMessage/);
+  assert.match(experience, /velocity-mode/);
+  assert.match(experience, /mode === "demo"/);
+  assert.match(experience, /No simulated recovery was shown/);
   assert.match(experience, /producer-run-show/);
   assert.match(experience, /Refresh room monitor/);
   assert.match(experience, /View full log/);
@@ -45,7 +48,8 @@ test("keeps third-party credentials server-side", async () => {
   assert.doesNotMatch(client, /LIVEKIT_API_SECRET|CRM_WEBHOOK_URL/);
   assert.match(tokenRoute, /LIVEKIT_API_SECRET/);
   assert.match(tokenRoute, /cache-control/);
-  assert.match(tokenRoute, /global-innovation-/);
+  assert.match(tokenRoute, /isVenueRoomName/);
+  assert.match(tokenRoute, /crypto\.randomUUID/);
   assert.match(envExample, /LIVEKIT_API_KEY=/);
   assert.match(envExample, /CRM_WEBHOOK_URL=/);
   assert.match(producerRoute, /authorizeProducerRequest/);
@@ -66,8 +70,10 @@ test("defines durable lead and incident records", async () => {
   assert.match(schema, /sqliteTable\("incidents"/);
   assert.match(schema, /sqliteTable\("audit_events"/);
   assert.match(schema, /sqliteTable\("run_of_show_items"/);
+  assert.match(schema, /sqliteTable\("support_tickets"/);
   assert.match(operationsRoute, /authorizeProducerRequest/);
   assert.match(operationsRoute, /set-run-status/);
+  assert.match(operationsRoute, /update-support/);
   assert.equal(JSON.parse(hosting).d1, "DB");
 });
 

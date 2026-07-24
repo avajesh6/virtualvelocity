@@ -6,7 +6,7 @@ const baseUrl = process.env.TEST_BASE_URL || "http://localhost:3000";
 test("serves the attendee experience", async () => {
   const response = await fetch(baseUrl);
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /Global Innovation Summit/);
+  assert.match(await response.text(), /VELOCITY VENUE|Velocity Venue/);
 });
 
 test("rejects invalid and unauthorized API requests safely", async () => {

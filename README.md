@@ -5,9 +5,9 @@ A branded virtual-event venue for attendees paired with a live producer command 
 ## What is included
 
 - Attendee venue with lobby, main stage, studio, expo, and networking spaces
-- Producer dashboard with room health, run of show, speaker cues, and support queue
-- Rescue Mode simulation for moving a disrupted session to a backup room
-- Expo lead capture persisted to Cloudflare D1, with an optional CRM webhook
+- Producer dashboard with real room counts, run-of-show control, announcements, audit history, and a persisted support queue
+- Live Rescue Mode for moving a disrupted session to a backup room
+- Explicit Demo mode for evaluating sample workflows without affecting live participants or records
 - Secure server-side LiveKit token endpoint and a real LiveKit conference room with device controls, screen sharing, chat, and reconnection handling; API credentials never reach the browser
 - Camera and microphone preview with device selection before joining
 - Responsive participant layout, live participant/connection status, and shareable room links
@@ -23,7 +23,10 @@ npm install
 npm run dev
 ```
 
-The experience runs in demo mode without external credentials. Lead capture still returns a successful demo response; LiveKit reports that configuration is required.
+Live mode is the default. It never substitutes sample values when a service is
+empty or unavailable. Use the clearly labelled **Demo** switch to explore sample
+attendees, schedules, chat, recovery, tickets, and expo lead capture without
+affecting real systems.
 
 ## Connect services
 
@@ -70,6 +73,8 @@ The deployed application also includes a user-facing guide at `/docs`, available
 - Producer authentication and role-based permissions: complete
 - LiveKit room administration and Rescue Mode: complete
 - D1-backed incidents, audit events, and run-of-show state: complete
+- D1-backed attendee support requests and producer ticket lifecycle: complete
+- Explicit, isolated Live and Demo data modes: complete
 - Calendar, Slack/Teams, and HubSpot/Salesforce/generic CRM adapters: complete
 - Source, build, route contract, failure-path, responsive accessibility, and smoke-load checks: complete
 

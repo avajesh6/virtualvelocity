@@ -51,3 +51,19 @@ export const runOfShowItems = sqliteTable("run_of_show_items", {
   updatedBy: text("updated_by").notNull(),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+// Attendees create support requests from the live venue. Producers update the
+// lifecycle in the command center; no fabricated tickets are used in Live mode.
+export const supportTickets = sqliteTable("support_tickets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventName: text("event_name").notNull(),
+  requesterId: text("requester_id").notNull(),
+  requesterName: text("requester_name").notNull(),
+  requesterEmail: text("requester_email").notNull(),
+  roomName: text("room_name").notNull(),
+  issue: text("issue").notNull(),
+  status: text("status").notNull().default("open"),
+  assignedTo: text("assigned_to").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

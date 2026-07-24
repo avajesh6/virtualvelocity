@@ -3,12 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { auditEvents, incidents } from "../../../../db/schema";
 import { authorizeProducerRequest } from "../../../producer-auth";
-
-const SOURCE_ROOMS = new Set([
-  "global-innovation-stage",
-  "global-innovation-studio",
-  "global-innovation-lounge",
-]);
+import { EVENT_NAME, isVenueRoomName } from "../../../venue-config";
 
 function getRoomClient() {
   // LiveKit's server SDK uses HTTP(S), while attendee clients use the websocket
@@ -22,7 +17,7 @@ function getRoomClient() {
 
 function validRoom(room: unknown): room is string {
   // Producer administration is restricted to rooms owned by this event.
-  return typeof room === "string" && SOURCE_ROOMS.has(room);
+  return isVenueRoomName(room);
 }
 
 export async function GET(request: Request) {
@@ -87,7 +82,7 @@ export async function POST(request: Request) {
         // Open the incident before touching LiveKit so the operational timeline
         // includes recovery attempts, not only successful outcomes.
         const created = await getDb().insert(incidents).values({
-          eventName: "Global Innovation Summit 2026",
+          eventName: EVENT_NAME,
           roomName: body.room,
           kind: "room-recovery",
           status: "active",
@@ -117,7 +112,7 @@ export async function POST(request: Request) {
         await db.insert(auditEvents).values({
           // Detail is JSON because the action has a small structured result; the
           // stable action/target columns remain easy to filter in D1.
-          eventName: "Global Innovation Summit 2026",
+          eventName: EVENT_NAME,
           actorEmail: auth.user.email,
           action: "room.rescue",
           target: body.room,
@@ -134,7 +129,7 @@ export async function POST(request: Request) {
       await client.removeParticipant(body.room, body.identity.trim());
       try {
         await getDb().insert(auditEvents).values({
-          eventName: "Global Innovation Summit 2026",
+          eventName: EVENT_NAME,
           actorEmail: auth.user.email,
           action: "participant.removed",
           target: body.identity.trim(),
@@ -147,7 +142,7 @@ export async function POST(request: Request) {
       await client.mutePublishedTrack(body.room, body.identity.trim(), body.trackSid.trim(), true);
       try {
         await getDb().insert(auditEvents).values({
-          eventName: "Global Innovation Summit 2026",
+          eventName: EVENT_NAME,
           actorEmail: auth.user.email,
           action: "participant.muted",
           target: body.identity.trim(),

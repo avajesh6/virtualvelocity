@@ -1,4 +1,5 @@
 import { AccessToken } from "livekit-server-sdk";
+import { isVenueRoomName } from "../../venue-config";
 
 /**
  * Issues least-scope LiveKit grants to attendee browsers.
@@ -7,17 +8,18 @@ import { AccessToken } from "livekit-server-sdk";
  * a short-lived JWT for one allowlisted event room.
  */
 export async function POST(request: Request) {
-  let body: { identity?: string; room?: string };
+  let body: { displayName?: string; identity?: string; room?: string };
   try {
     body = (await request.json()) as { identity?: string; room?: string };
   } catch {
     return Response.json({ error: "A valid JSON body is required." }, { status: 400 });
   }
-  const { identity, room } = body;
-  if (!identity?.trim() || !room?.trim()) {
-    return Response.json({ error: "identity and room are required" }, { status: 400 });
+  const displayName = body.displayName?.trim() || body.identity?.trim();
+  const { room } = body;
+  if (!displayName || !room?.trim()) {
+    return Response.json({ error: "displayName and room are required" }, { status: 400 });
   }
-  if (identity.trim().length > 64 || !/^global-innovation-(stage|studio|lounge)$/.test(room.trim())) {
+  if (displayName.length > 64 || !isVenueRoomName(room.trim())) {
     // Room allowlisting prevents a caller from using this public endpoint to
     // mint tokens for unrelated rooms in the same LiveKit project.
     return Response.json({ error: "Invalid identity or room." }, { status: 400 });
@@ -30,9 +32,12 @@ export async function POST(request: Request) {
     return Response.json({ mode: "demo", message: "LiveKit credentials are not configured." }, { status: 503 });
   }
 
+  // A server-generated identity prevents two attendees with the same display
+  // name from disconnecting each other. The human-readable name stays stable.
+  const identity = `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "guest"}-${crypto.randomUUID()}`;
   const token = new AccessToken(apiKey, apiSecret, {
-    identity: identity.trim(),
-    name: identity.trim(),
+    identity,
+    name: displayName,
     ttl: "1h",
   });
   // Attendees need publish and subscribe for two-way conference participation.

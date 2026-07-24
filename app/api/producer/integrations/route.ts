@@ -2,6 +2,7 @@ import { getDb } from "../../../../db";
 import { auditEvents } from "../../../../db/schema";
 import { dispatchIntegration, type IntegrationChannel } from "../../../integrations";
 import { authorizeProducerRequest } from "../../../producer-auth";
+import { EVENT_NAME } from "../../../venue-config";
 
 const CHANNELS = new Set<IntegrationChannel>(["calendar", "slack", "teams"]);
 
@@ -22,14 +23,14 @@ export async function POST(request: Request) {
     const result = await dispatchIntegration({
       channel: body.channel,
       message: body.message.trim(),
-      eventName: "Global Innovation Summit 2026",
+      eventName: EVENT_NAME,
       roomName: body.roomName,
       startsAt: body.startsAt,
       endsAt: body.endsAt,
     });
     try {
       await getDb().insert(auditEvents).values({
-        eventName: "Global Innovation Summit 2026",
+        eventName: EVENT_NAME,
         actorEmail: auth.user.email,
         action: `integration.${body.channel}`,
         target: body.roomName || "",

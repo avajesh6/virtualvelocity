@@ -10,14 +10,21 @@ Creates a short-lived attendee token.
 
 ```json
 {
-  "identity": "Alex Morgan",
-  "room": "global-innovation-stage"
+  "displayName": "Ava Morgan",
+  "room": "velocity-venue-stage"
 }
 ```
 
-Allowed rooms are `global-innovation-stage`, `global-innovation-studio`, and
-`global-innovation-lounge`. Successful responses include `token` and
+Allowed rooms are `velocity-venue-stage`, `velocity-venue-studio`,
+`velocity-venue-expo`, and `velocity-venue-lounge`. The server creates a unique
+participant identity so duplicate display names do not collide. Successful responses include `token` and
 `serverUrl`. Missing service credentials return `503`.
+
+### `GET /api/venue`
+
+Returns current LiveKit participant totals for all venue rooms, the persisted
+agenda, recent producer announcements, and explicit media/schedule availability.
+It never returns Demo-mode samples.
 
 ### `POST /api/leads`
 
@@ -47,6 +54,18 @@ email must appear in `PRODUCER_EMAILS`.
 
 Returns the verified user profile and effective role.
 
+### `GET /api/support`
+
+Returns support requests created by the signed-in attendee.
+
+### `POST /api/support`
+
+Creates a persisted producer support ticket using the verified account identity:
+
+```json
+{ "room": "velocity-venue-stage", "issue": "My microphone is not detected." }
+```
+
 ### `GET /api/producer/room?room=<room-name>`
 
 Lists current LiveKit participants and their audio state.
@@ -56,15 +75,15 @@ Lists current LiveKit participants and their audio state.
 Supported actions:
 
 ```json
-{ "action": "mute", "room": "global-innovation-stage", "identity": "user-id", "trackSid": "TR_..." }
+{ "action": "mute", "room": "velocity-venue-stage", "identity": "user-id", "trackSid": "TR_..." }
 ```
 
 ```json
-{ "action": "remove", "room": "global-innovation-stage", "identity": "user-id" }
+{ "action": "remove", "room": "velocity-venue-stage", "identity": "user-id" }
 ```
 
 ```json
-{ "action": "rescue", "room": "global-innovation-stage" }
+{ "action": "rescue", "room": "velocity-venue-stage" }
 ```
 
 ### `GET /api/producer/operations`
@@ -74,8 +93,9 @@ Returns:
 - `runOfShow`: ordered persistent show items.
 - `activity`: newest audit events.
 - `incidents`: newest operational incidents.
+- `supportTickets`: persisted attendee support requests.
 
-When an event has no run-of-show rows, the endpoint seeds the default program.
+An event with no schedule returns an empty array; it does not seed sample data.
 
 ### `POST /api/producer/operations`
 
@@ -89,6 +109,20 @@ Record an operator note:
 
 ```json
 { "action": "record-event", "message": "Speaker rejoined", "target": "Main Stage" }
+```
+
+Create an agenda item, publish an attendee announcement, or update a ticket:
+
+```json
+{ "action": "add-run-item", "scheduledTime": "10:30", "title": "Keynote", "owner": "Host" }
+```
+
+```json
+{ "action": "announce", "message": "The keynote begins in five minutes." }
+```
+
+```json
+{ "action": "update-support", "ticketId": 12, "status": "resolved" }
 ```
 
 ### `POST /api/producer/integrations`
@@ -117,4 +151,3 @@ Dispatches an authenticated operational message.
 | `404` | Requested persistent record does not exist |
 | `502` | Configured external provider failed |
 | `503` | Required service or binding is not configured/available |
-

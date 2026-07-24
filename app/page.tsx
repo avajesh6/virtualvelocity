@@ -4,7 +4,7 @@ import { ConferenceExperience } from "./conference-experience";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Velocity Venue — Global Innovation Summit",
+  title: "Velocity Venue — Live Video Conferences",
   description:
     "A resilient virtual conference venue and producer command center.",
 };

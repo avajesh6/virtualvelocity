@@ -1,42 +1,17 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { auditEvents, incidents, runOfShowItems } from "../../../../db/schema";
+import { auditEvents, incidents, runOfShowItems, supportTickets } from "../../../../db/schema";
 import { authorizeProducerRequest } from "../../../producer-auth";
-
-const EVENT_NAME = "Global Innovation Summit 2026";
-// The default program makes a fresh event database immediately usable. Once
-// seeded, D1 becomes the authoritative source for status and ordering.
-const DEFAULT_RUN_OF_SHOW = [
-  { scheduledTime: "11:00", title: "Opening film", owner: "Playback", status: "done" },
-  { scheduledTime: "11:03", title: "Welcome & context", owner: "Maya Chen", status: "done" },
-  { scheduledTime: "11:12", title: "Building trust in an AI-first world", owner: "Elias + Sofia", status: "live" },
-  { scheduledTime: "11:32", title: "Audience pulse", owner: "Cris", status: "next" },
-  { scheduledTime: "11:35", title: "Transition to Studio One", owner: "All producers", status: "queued" },
-];
-
-async function ensureRunOfShow(actorEmail: string) {
-  const db = getDb();
-  const existing = await db.select().from(runOfShowItems)
-    .where(eq(runOfShowItems.eventName, EVENT_NAME)).limit(1);
-  // Idempotent initialization avoids duplicate schedules across cold starts.
-  if (existing.length) return;
-  await db.insert(runOfShowItems).values(DEFAULT_RUN_OF_SHOW.map((item, position) => ({
-    eventName: EVENT_NAME,
-    position,
-    ...item,
-    updatedBy: actorEmail,
-  })));
-}
+import { EVENT_NAME } from "../../../venue-config";
 
 export async function GET(request: Request) {
   const auth = await authorizeProducerRequest(request);
   if ("error" in auth) return auth.error;
   try {
-    await ensureRunOfShow(auth.user.email);
     const db = getDb();
     // These independent reads run concurrently to keep command-center refreshes
     // fast even when the D1 database is in a distant region.
-    const [runOfShow, activity, incidentLog] = await Promise.all([
+    const [runOfShow, activity, incidentLog, tickets] = await Promise.all([
       db.select().from(runOfShowItems)
         .where(eq(runOfShowItems.eventName, EVENT_NAME))
         .orderBy(asc(runOfShowItems.position)),
@@ -46,12 +21,15 @@ export async function GET(request: Request) {
       db.select().from(incidents)
         .where(eq(incidents.eventName, EVENT_NAME))
         .orderBy(desc(incidents.id)).limit(20),
+      db.select().from(supportTickets)
+        .where(eq(supportTickets.eventName, EVENT_NAME))
+        .orderBy(desc(supportTickets.id)).limit(50),
     ]);
-    return Response.json({ runOfShow, activity, incidents: incidentLog }, {
+    return Response.json({ runOfShow, activity, incidents: incidentLog, supportTickets: tickets }, {
       headers: { "cache-control": "no-store" },
     });
   } catch {
-    return Response.json({ mode: "demo", message: "Persistent operations are unavailable." }, { status: 503 });
+    return Response.json({ error: "Persistent operations are unavailable." }, { status: 503 });
   }
 }
 
@@ -64,6 +42,11 @@ export async function POST(request: Request) {
     status?: string;
     message?: string;
     target?: string;
+    scheduledTime?: string;
+    title?: string;
+    owner?: string;
+    room?: string;
+    ticketId?: number;
   };
   try {
     const db = getDb();
@@ -110,6 +93,68 @@ export async function POST(request: Request) {
         detail: body.message.trim(),
       });
       return Response.json({ ok: true }, { status: 201 });
+    }
+    if (body.action === "add-run-item") {
+      const scheduledTime = body.scheduledTime?.trim() ?? "";
+      const title = body.title?.trim() ?? "";
+      const owner = body.owner?.trim() ?? "";
+      if (!/^\d{2}:\d{2}$/.test(scheduledTime) || !title || !owner) {
+        return Response.json({ error: "Time, title, and owner are required." }, { status: 400 });
+      }
+      const existing = await db.select().from(runOfShowItems)
+        .where(eq(runOfShowItems.eventName, EVENT_NAME));
+      const created = await db.insert(runOfShowItems).values({
+        eventName: EVENT_NAME,
+        position: existing.length,
+        scheduledTime,
+        title,
+        owner,
+        status: existing.length === 0 ? "next" : "queued",
+        updatedBy: auth.user.email,
+      }).returning();
+      await db.insert(auditEvents).values({
+        eventName: EVENT_NAME,
+        actorEmail: auth.user.email,
+        action: "run-of-show.created",
+        target: String(created[0].id),
+        detail: title,
+      });
+      return Response.json({ item: created[0] }, { status: 201 });
+    }
+    if (body.action === "announce" && body.message?.trim()) {
+      const message = body.message.trim();
+      if (message.length > 500) return Response.json({ error: "Announcement is too long." }, { status: 400 });
+      await db.insert(auditEvents).values({
+        eventName: EVENT_NAME,
+        actorEmail: auth.user.email,
+        action: "producer.announcement",
+        target: "all-attendees",
+        detail: message,
+      });
+      return Response.json({ ok: true }, { status: 201 });
+    }
+    if (
+      body.action === "update-support"
+      && Number.isInteger(body.ticketId)
+      && (body.status === "open" || body.status === "in_progress" || body.status === "resolved")
+    ) {
+      const ticket = await db.select().from(supportTickets)
+        .where(and(eq(supportTickets.id, body.ticketId!), eq(supportTickets.eventName, EVENT_NAME)))
+        .limit(1);
+      if (!ticket.length) return Response.json({ error: "Support ticket not found." }, { status: 404 });
+      await db.update(supportTickets).set({
+        status: body.status,
+        assignedTo: body.status === "open" ? "" : auth.user.email,
+        updatedAt: new Date().toISOString(),
+      }).where(eq(supportTickets.id, body.ticketId!));
+      await db.insert(auditEvents).values({
+        eventName: EVENT_NAME,
+        actorEmail: auth.user.email,
+        action: `support.${body.status}`,
+        target: String(body.ticketId),
+        detail: ticket[0].issue,
+      });
+      return Response.json({ ok: true });
     }
     return Response.json({ error: "Unsupported operation." }, { status: 400 });
   } catch {

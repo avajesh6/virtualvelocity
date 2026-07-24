@@ -11,15 +11,16 @@
 5. Check the attendee experience in both light and dark modes at desktop and mobile
    widths.
 6. Verify participant refresh, mute, and removal in a non-production rehearsal room.
-7. Confirm the run of show loads from D1 and can be advanced.
-8. Send test calendar, Slack, Teams, and CRM requests only to approved test endpoints.
-9. Confirm a backup room can be created and that the event team understands Rescue Mode.
+7. Publish at least one run-of-show item, then confirm it can be advanced.
+8. Create an attendee support request and verify assignment and resolution in Producer mode.
+9. Send test calendar, Slack, Teams, and CRM requests only to approved test endpoints.
+10. Confirm a backup room can be created and that the event team understands Rescue Mode.
 
 ## During an event
 
 - Use the run of show as the operational source of truth.
 - Refresh participants before muting or removing someone.
-- Use quick cues for speaker timing; use announcements for venue-wide information.
+- Use persisted announcements for venue-wide information.
 - Treat a “not configured” adapter message differently from a delivery failure.
 - Do not repeatedly activate Rescue Mode. Once started, allow LiveKit movement and incident logging to complete.
 
@@ -62,11 +63,12 @@ Sign out and sign in again after changing role metadata.
 - Confirm `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are Worker secrets.
 - Confirm the requested room is on the server allowlist.
 
-### Run-of-show data remains in demo mode
+### Run-of-show data is unavailable or empty
 
 - Confirm the `DB` binding points to the intended D1 database.
 - Confirm all files in `drizzle/` have been applied in order.
 - Check the protected operations endpoint for a `503` response.
+- An empty array is valid until a producer publishes an agenda item.
 
 ### Announcement is not delivered
 

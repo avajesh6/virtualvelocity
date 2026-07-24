@@ -54,10 +54,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "./supabase-client";
+import { VENUE_ROOMS, type VenueRoomId } from "./venue-config";
 
 type Role = "attendee" | "producer";
 type Theme = "dark" | "light";
-type RoomId = "stage" | "studio" | "expo" | "lounge";
+type AppMode = "live" | "demo";
+type RoomId = VenueRoomId;
 type LiveConnection = {
   token: string;
   serverUrl: string;
@@ -79,8 +81,35 @@ type OperationalEvent = {
   detail: string;
   action?: string;
 };
+type SupportTicket = {
+  id: number;
+  requesterName: string;
+  requesterEmail: string;
+  roomName: string;
+  issue: string;
+  status: "open" | "in_progress" | "resolved";
+  assignedTo: string;
+  createdAt: string;
+};
+type VenueSnapshot = {
+  eventName: string;
+  serverTime: string;
+  mediaAvailable: boolean;
+  mediaError: string | null;
+  scheduleAvailable: boolean;
+  totalParticipants: number;
+  activeRooms: number;
+  rooms: Array<{
+    id: RoomId;
+    roomName: string;
+    title: string;
+    participantCount: number;
+  }>;
+  runOfShow: RunOfShowItem[];
+  announcements: Array<{ id: number; detail: string; createdAt: string }>;
+};
 
-const rooms = [
+const demoRooms = [
   {
     id: "stage" as RoomId,
     kicker: "LIVE NOW",
@@ -119,13 +148,48 @@ const rooms = [
   },
 ];
 
-const people = [
+const liveRoomPresentation = [
+  {
+    id: "stage" as RoomId,
+    kicker: "LIVE ROOM",
+    title: "Main stage",
+    description: "Primary conference room",
+    accent: "coral",
+    icon: Radio,
+  },
+  {
+    id: "studio" as RoomId,
+    kicker: "LIVE ROOM",
+    title: "Studio one",
+    description: "Breakout and speaker room",
+    accent: "violet",
+    icon: MonitorUp,
+  },
+  {
+    id: "expo" as RoomId,
+    kicker: "LIVE ROOM",
+    title: "Expo room",
+    description: "Partner and product conversations",
+    accent: "lime",
+    icon: Store,
+  },
+  {
+    id: "lounge" as RoomId,
+    kicker: "LIVE ROOM",
+    title: "Connection lounge",
+    description: "Open networking room",
+    accent: "cyan",
+    icon: Users,
+  },
+];
+
+const demoPeople = [
   { name: "Maya Chen", role: "Chief Product Officer", initials: "MC", color: "violet" },
   { name: "Elias Brooks", role: "Futurist & Author", initials: "EB", color: "cyan" },
   { name: "Sofia Alvarez", role: "VP, Responsible AI", initials: "SA", color: "coral" },
 ];
 
-const runOfShow = [
+const demoRunOfShow = [
   { time: "11:00", title: "Opening film", owner: "Playback", status: "done" },
   { time: "11:03", title: "Welcome & context", owner: "Maya Chen", status: "done" },
   { time: "11:12", title: "Building trust in an AI-first world", owner: "Elias + Sofia", status: "live" },
@@ -133,11 +197,21 @@ const runOfShow = [
   { time: "11:35", title: "Transition to Studio One", owner: "All producers", status: "queued" },
 ];
 
-const initialEvents = [
+const demoEvents = [
   { time: "11:24:08", text: "Speaker handoff completed", tone: "good" },
   { time: "11:22:41", text: "Maya Chen returned to green room", tone: "neutral" },
   { time: "11:19:16", text: "Poll #1 closed · 214 responses", tone: "neutral" },
 ];
+
+type DisplayRoom = {
+  id: RoomId;
+  kicker: string;
+  title: string;
+  description: string;
+  count: number;
+  accent: string;
+  icon: typeof Radio;
+};
 
 function BrandMark() {
   return (
@@ -151,7 +225,7 @@ function BrandMark() {
 function AvatarStack({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`avatar-stack ${compact ? "compact" : ""}`} aria-label="Active attendees">
-      {people.map((person) => (
+      {demoPeople.map((person) => (
         <span className={`mini-avatar ${person.color}`} key={person.name}>{person.initials}</span>
       ))}
       <span className="mini-avatar more">+8</span>
@@ -166,12 +240,12 @@ function StatusPill({ children, tone = "live" }: { children: React.ReactNode; to
 export function ConferenceExperience() {
   // The attendee and producer experiences share one shell so a producer can
   // inspect the attendee surface without losing the authenticated session.
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
-    const stored = window.localStorage.getItem("velocity-theme");
-    if (stored === "light" || stored === "dark") return stored;
-    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  });
+  // Deterministic initial values keep the server and first browser render
+  // identical. Device preferences are restored immediately after hydration.
+  const [theme, setTheme] = useState<Theme>("dark");
+  const [mode, setMode] = useState<AppMode>("live");
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [localHour, setLocalHour] = useState(12);
   const [role, setRole] = useState<Role>("attendee");
   const [producerUser, setProducerUser] = useState<ProducerUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -192,13 +266,41 @@ export function ConferenceExperience() {
   const [leadSending, setLeadSending] = useState(false);
   const [rescueState, setRescueState] = useState<"idle" | "moving" | "complete">("idle");
   const [, setActiveRos] = useState(2);
-  const [events, setEvents] = useState(initialEvents);
+  const [events, setEvents] = useState(demoEvents);
   const [liveDialogOpen, setLiveDialogOpen] = useState(false);
   const [liveJoining, setLiveJoining] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveConnection, setLiveConnection] = useState<LiveConnection | null>(null);
+  const [venueSnapshot, setVenueSnapshot] = useState<VenueSnapshot | null>(null);
+  const [venueStatus, setVenueStatus] = useState<"loading" | "ready" | "error">("loading");
 
-  const activeRoom = useMemo(() => rooms.find((item) => item.id === room) ?? rooms[0], [room]);
+  const displayRooms = useMemo(() => {
+    if (mode === "demo") return demoRooms;
+    return liveRoomPresentation.map((presentation) => ({
+      ...presentation,
+      count: venueSnapshot?.rooms.find((item) => item.id === presentation.id)?.participantCount ?? 0,
+    }));
+  }, [mode, venueSnapshot]);
+  const activeRoom = useMemo(
+    () => displayRooms.find((item) => item.id === room) ?? displayRooms[0],
+    [displayRooms, room],
+  );
+  const greeting = localHour < 12 ? "Good morning" : localHour < 18 ? "Good afternoon" : "Good evening";
+
+  useEffect(() => {
+    const storedTheme = window.localStorage.getItem("velocity-theme");
+    const storedMode = window.localStorage.getItem("velocity-mode");
+    queueMicrotask(() => {
+      setTheme(
+        storedTheme === "light" || storedTheme === "dark"
+          ? storedTheme
+          : window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark",
+      );
+      setMode(storedMode === "demo" ? "demo" : "live");
+      setLocalHour(new Date().getHours());
+      setPreferencesReady(true);
+    });
+  }, []);
 
   useEffect(() => {
     // Theme is a device-local preference, so browser storage is appropriate.
@@ -206,13 +308,49 @@ export function ConferenceExperience() {
   }, [theme]);
 
   useEffect(() => {
+    if (!preferencesReady) return;
+    window.localStorage.setItem("velocity-mode", mode);
+    if (mode === "demo") {
+      queueMicrotask(() => setVenueStatus("ready"));
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/venue", { cache: "no-store" });
+        if (!response.ok) throw new Error("Venue status request failed");
+        const payload = await response.json() as VenueSnapshot;
+        if (!cancelled) {
+          setVenueSnapshot(payload);
+          setVenueStatus("ready");
+        }
+      } catch {
+        if (!cancelled) setVenueStatus("error");
+      }
+    };
+    queueMicrotask(() => setVenueStatus("loading"));
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [mode, preferencesReady]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setNotificationsUnread(mode === "demo" || Boolean(venueSnapshot?.announcements.length));
+    });
+  }, [mode, venueSnapshot?.announcements.length]);
+
+  useEffect(() => {
     // Invite URLs use the stable venue room id. Accept the older full LiveKit
     // room name as well so previously copied links continue to work.
     const requested = new URLSearchParams(window.location.search)
       .get("room")
-      ?.replace("global-innovation-", "");
-    const invitedRoom = rooms.find((item) => item.id === requested)?.id;
-    if (invitedRoom && invitedRoom !== "expo") {
+      ?.replace(/^(global-innovation|velocity-venue)-/, "");
+    const invitedRoom = VENUE_ROOMS.find((item) => item.id === requested)?.id;
+    if (invitedRoom) {
       queueMicrotask(() => {
         setRoom(invitedRoom);
         setLiveDialogOpen(true);
@@ -397,7 +535,7 @@ export function ConferenceExperience() {
 
   const enterRoom = (next: RoomId) => {
     setRoom(next);
-    setNotice(`You’re now in ${rooms.find((item) => item.id === next)?.title}.`);
+    setNotice(`You’re now viewing ${displayRooms.find((item) => item.id === next)?.title}.`);
   };
 
   const captureLead = async () => {
@@ -430,52 +568,48 @@ export function ConferenceExperience() {
   const triggerRescue = async () => {
     if (rescueState !== "idle") return;
     setRescueState("moving");
-    setEvents((current) => [
-      { time: "11:27:02", text: "Rescue Mode activated by Cris", tone: "warn" },
-      ...current,
-    ]);
-    let moved = 286;
-    let liveRecovery = false;
+    if (mode === "demo") {
+      setEvents((current) => [
+        { time: new Date().toLocaleTimeString(), text: "Demo Rescue Mode activated", tone: "warn" },
+        ...current,
+      ]);
+      window.setTimeout(() => {
+        setRescueState("complete");
+        setEvents((current) => [
+          { time: new Date().toLocaleTimeString(), text: "Demo recovery completed for 286 attendees", tone: "good" },
+          ...current,
+        ]);
+        setNotice("Demo recovery complete. No live participants were affected.");
+      }, 1_200);
+      return;
+    }
     try {
-      // LiveKit recovery and D1 incident logging are orchestrated server-side.
-      // The browser owns only progress feedback and the demo fallback.
       const response = await fetch("/api/producer/room", {
         method: "POST",
         headers: {
           "content-type": "application/json",
           ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ action: "rescue", room: "global-innovation-stage" }),
+        body: JSON.stringify({ action: "rescue", room: "velocity-venue-stage" }),
       });
       const payload = (await response.json()) as { moved?: number };
-      if (response.ok) {
-        moved = payload.moved ?? 0;
-        liveRecovery = true;
-      }
-    } catch {
-      // The visual recovery remains available as a clearly labelled demo fallback.
-    }
-    window.setTimeout(() => {
-      // A short transition makes the simulated path understandable. Real
-      // recovery uses a shorter acknowledgement because the API already waited
-      // for participant movement results.
+      if (!response.ok) throw new Error("Live recovery failed");
       setRescueState("complete");
-      setEvents((current) => [
-        { time: "11:27:09", text: liveRecovery ? `${moved} live participants moved to Main Stage Backup` : "Demo recovery completed for 286 attendees", tone: "good" },
-        ...current,
-      ]);
-      setNotice(liveRecovery ? `Live recovery complete · ${moved} participants moved.` : "Demo recovery complete · connect LiveKit to move real participants.");
-    }, liveRecovery ? 500 : 1700);
+      setNotice(`Live recovery complete · ${payload.moved ?? 0} participants moved.`);
+    } catch {
+      setRescueState("idle");
+      setNotice("Live recovery failed. No simulated recovery was shown.");
+    }
   };
 
   const resetDemo = () => {
     setRescueState("idle");
-    setEvents(initialEvents);
+    setEvents(demoEvents);
     setNotice("Rescue simulation reset.");
   };
 
   const openLiveRoom = (nextRoom?: RoomId) => {
-    if (nextRoom && nextRoom !== "expo") setRoom(nextRoom);
+    if (nextRoom) setRoom(nextRoom);
     setLiveError(null);
     setLiveDialogOpen(true);
   };
@@ -488,13 +622,14 @@ export function ConferenceExperience() {
     setLiveJoining(true);
     setLiveError(null);
     try {
-      const roomName = `global-innovation-${room}`;
+      const roomName = VENUE_ROOMS.find((item) => item.id === room)?.roomName;
+      if (!roomName) throw new Error("This room is not configured.");
       // Request a room-scoped token immediately before joining; tokens are not
       // stored in localStorage or reused across venue spaces.
       const response = await fetch("/api/livekit-token", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identity: choices.username.trim(), room: roomName }),
+        body: JSON.stringify({ displayName: choices.username.trim(), room: roomName }),
       });
       const payload = (await response.json()) as { token?: string; serverUrl?: string; message?: string; error?: string };
       if (!response.ok || !payload.token || !payload.serverUrl) {
@@ -522,10 +657,14 @@ export function ConferenceExperience() {
       <header className="topbar">
         <BrandMark />
         <div className="event-title">
-          <span>GLOBAL INNOVATION SUMMIT 2026</span>
-          <small>LIVE · JUL 31</small>
+          <span>{mode === "demo" ? "DEMO EVENT" : venueSnapshot?.eventName ?? "VELOCITY VENUE"}</span>
+          <small>{mode === "demo" ? "DEMO DATA · NO LIVE IMPACT" : venueStatus === "ready" ? "LIVE DATA" : venueStatus.toUpperCase()}</small>
         </div>
         <div className="top-actions">
+          <div className="role-switch mode-switch" aria-label="Choose data mode">
+            <button className={mode === "live" ? "active" : ""} onClick={() => setMode("live")}>Live</button>
+            <button className={mode === "demo" ? "active" : ""} onClick={() => setMode("demo")}>Demo</button>
+          </div>
           <div className="role-switch" aria-label="Switch app role">
             <button className={role === "attendee" ? "active" : ""} onClick={() => setRole("attendee")}>Attendee</button>
             <button className={role === "producer" ? "active" : ""} onClick={openProducer} disabled={!authReady}>{producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
@@ -553,20 +692,38 @@ export function ConferenceExperience() {
             </button>
             {notificationsOpen && (
               <section className="notification-menu" id="notification-menu" aria-label="Recent notifications">
-                <div><strong>Notifications</strong><span>3 recent</span></div>
-                <button type="button" onClick={() => { setNotificationsOpen(false); setNotice("Main Stage is live and healthy."); }}><Radio size={15} /><span><strong>Main Stage is live</strong><small>All speakers connected · now</small></span></button>
-                <button type="button" onClick={() => { setNotificationsOpen(false); setNotice("Studio One device check opens at 11:25."); }}><Video size={15} /><span><strong>Studio One opens soon</strong><small>Device check at 11:25</small></span></button>
-                <button type="button" onClick={() => { setNotificationsOpen(false); enterRoom("expo"); }}><Store size={15} /><span><strong>Partner expo is open</strong><small>12 booths available</small></span></button>
+                <div><strong>{mode === "demo" ? "Demo notifications" : "Announcements"}</strong><span>{mode === "demo" ? 3 : venueSnapshot?.announcements.length ?? 0} recent</span></div>
+                {mode === "demo" ? (
+                  <>
+                    <button type="button" onClick={() => { setNotificationsOpen(false); setNotice("Demo: Main Stage is live and healthy."); }}><Radio size={15} /><span><strong>Main Stage is live</strong><small>All speakers connected · demo</small></span></button>
+                    <button type="button" onClick={() => { setNotificationsOpen(false); setNotice("Demo: Studio One opens soon."); }}><Video size={15} /><span><strong>Studio One opens soon</strong><small>Device check at 11:25 · demo</small></span></button>
+                    <button type="button" onClick={() => { setNotificationsOpen(false); enterRoom("expo"); }}><Store size={15} /><span><strong>Partner expo is open</strong><small>12 booths available · demo</small></span></button>
+                  </>
+                ) : venueSnapshot?.announcements.length ? (
+                  venueSnapshot.announcements.map((announcement) => (
+                    <button key={announcement.id} type="button" onClick={() => { setNotificationsOpen(false); setNotice(announcement.detail); }}>
+                      <Bell size={15} /><span><strong>{announcement.detail}</strong><small>{new Date(announcement.createdAt).toLocaleString()}</small></span>
+                    </button>
+                  ))
+                ) : <p className="empty-state">No producer announcements.</p>}
                 <button className="notification-clear" type="button" onClick={() => { setNotificationsUnread(false); setNotificationsOpen(false); setNotice("Notifications marked as read."); }}>Mark all as read</button>
               </section>
             )}
           </div>
-          {producerUser ? <button className="profile-button" onClick={signOut} aria-label="Sign out" title={`Signed in as ${producerUser.email}. Click to sign out.`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</button> : <button className="profile-button" onClick={() => setAuthDialogOpen(true)} aria-label="Sign in">AM</button>}
+          {producerUser ? <button className="profile-button" onClick={signOut} aria-label="Sign out" title={`Signed in as ${producerUser.email}. Click to sign out.`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</button> : <button className="profile-button" onClick={() => setAuthDialogOpen(true)} aria-label="Sign in"><Users size={15} /></button>}
         </div>
       </header>
 
       {role === "attendee" ? (
         <AttendeeView
+          mode={mode}
+          rooms={displayRooms}
+          venueSnapshot={venueSnapshot}
+          venueStatus={venueStatus}
+          greeting={greeting}
+          appUser={producerUser}
+          accessToken={accessToken}
+          requestSignIn={() => setAuthDialogOpen(true)}
           room={room}
           activeRoom={activeRoom}
           enterRoom={enterRoom}
@@ -585,6 +742,9 @@ export function ConferenceExperience() {
         />
       ) : (
         <ProducerView
+          mode={mode}
+          venueSnapshot={venueSnapshot}
+          greeting={greeting}
           rescueState={rescueState}
           triggerRescue={triggerRescue}
           resetDemo={resetDemo}
@@ -615,6 +775,7 @@ export function ConferenceExperience() {
           roomTitle={activeRoom.title}
           roomDescription={activeRoom.description}
           attendeeCount={activeRoom.count}
+          defaultName={producerUser?.displayName ?? ""}
           audioEnabled={micOn}
           videoEnabled={cameraOn}
           joining={liveJoining}
@@ -641,6 +802,14 @@ export function ConferenceExperience() {
 }
 
 function AttendeeView({
+  mode,
+  rooms,
+  venueSnapshot,
+  venueStatus,
+  greeting,
+  appUser,
+  accessToken,
+  requestSignIn,
   room,
   activeRoom,
   enterRoom,
@@ -657,8 +826,16 @@ function AttendeeView({
   liveConnected,
   notify,
 }: {
+  mode: AppMode;
+  rooms: DisplayRoom[];
+  venueSnapshot: VenueSnapshot | null;
+  venueStatus: "loading" | "ready" | "error";
+  greeting: string;
+  appUser: ProducerUser | null;
+  accessToken: string | null;
+  requestSignIn: () => void;
   room: RoomId;
-  activeRoom: (typeof rooms)[number];
+  activeRoom: DisplayRoom;
   enterRoom: (room: RoomId) => void;
   micOn: boolean;
   setMicOn: (value: boolean) => void;
@@ -675,8 +852,51 @@ function AttendeeView({
 }) {
   const [chatDraft, setChatDraft] = useState("");
   const [sentMessages, setSentMessages] = useState<string[]>([]);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportIssue, setSupportIssue] = useState("");
+  const [supportBusy, setSupportBusy] = useState(false);
+
+  const liveItem = venueSnapshot?.runOfShow.find((item) => item.status === "live");
+  const nextItem = venueSnapshot?.runOfShow.find((item) => item.status === "next")
+    ?? venueSnapshot?.runOfShow.find((item) => item.status === "queued");
+  const stageCount = rooms.find((item) => item.id === "stage")?.count ?? 0;
+
+  const submitSupport = async () => {
+    if (!accessToken) {
+      notify("Sign in before creating a support request.");
+      requestSignIn();
+      return;
+    }
+    const roomName = VENUE_ROOMS.find((item) => item.id === room)?.roomName;
+    if (!roomName || supportIssue.trim().length < 5) return;
+    setSupportBusy(true);
+    try {
+      const response = await fetch("/api/support", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ room: roomName, issue: supportIssue.trim() }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Support request failed");
+      setSupportIssue("");
+      setSupportOpen(false);
+      notify("Your support request was sent to the producer queue.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Your support request could not be sent.");
+    } finally {
+      setSupportBusy(false);
+    }
+  };
 
   const sendChatMessage = () => {
+    if (mode !== "demo") {
+      openLiveRoom(room);
+      setChatOpen(false);
+      return;
+    }
     const message = chatDraft.trim();
     if (!message) return;
     setSentMessages((current) => [...current, message]);
@@ -689,11 +909,11 @@ function AttendeeView({
         <div>
           <button className="nav-item active" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><Map size={20} /><span>Venue</span></button>
           <button className="nav-item" onClick={() => document.getElementById("rooms")?.scrollIntoView({ behavior: "smooth" })}><CalendarDays size={20} /><span>Agenda</span></button>
-          <button className="nav-item" onClick={() => setChatOpen(true)}><MessageSquareText size={20} /><span>Chat</span></button>
+          <button className="nav-item" onClick={() => mode === "demo" ? setChatOpen(true) : openLiveRoom(room)}><MessageSquareText size={20} /><span>Chat</span></button>
           <button className="nav-item" onClick={() => enterRoom("expo")}><Store size={20} /><span>Expo</span></button>
         </div>
         <div>
-          <button className="nav-item" onClick={() => window.location.assign("/docs")}><CircleHelp size={20} /><span>Help</span></button>
+          <button className="nav-item" onClick={() => mode === "demo" ? window.location.assign("/docs") : setSupportOpen(true)}><CircleHelp size={20} /><span>Help</span></button>
         </div>
       </aside>
 
@@ -701,29 +921,29 @@ function AttendeeView({
         <div className="welcome-row">
           <div>
             <span className="eyebrow"><Sparkles size={14} /> YOUR EVENT, IN MOTION</span>
-            <h1>Good morning, Alex.</h1>
-            <p>Everything happening now—without the conference chaos.</p>
+            <h1>{greeting}{appUser ? `, ${appUser.displayName.split(" ")[0]}` : ""}.</h1>
+            <p>{mode === "demo" ? "Demo event data is active—no live systems are affected." : "Live venue status from your connected conference services."}</p>
           </div>
-          <div className="global-pulse"><Activity size={16} /><strong>431</strong><span>people here now</span></div>
+          <div className="global-pulse"><Activity size={16} /><strong>{mode === "demo" ? 431 : venueStatus === "ready" ? venueSnapshot?.totalParticipants ?? 0 : "—"}</strong><span>{mode === "demo" ? "demo attendees" : "people here now"}</span></div>
         </div>
 
         <section className="live-feature">
           <div className="feature-copy">
-            <StatusPill>LIVE · MAIN STAGE</StatusPill>
-            <h2>Building trust in<br />an AI-first world</h2>
-            <p>Maya Chen, Elias Brooks and Sofia Alvarez unpack what responsible innovation looks like when the stakes are real.</p>
-            <div className="speaker-row"><AvatarStack /><span>3 speakers · 286 watching</span></div>
+            <StatusPill>{mode === "demo" ? "DEMO · MAIN STAGE" : stageCount > 0 ? "LIVE · MAIN STAGE" : venueSnapshot?.mediaAvailable ? "READY · MAIN STAGE" : "MAIN STAGE UNAVAILABLE"}</StatusPill>
+            <h2>{mode === "demo" ? <>Building trust in<br />an AI-first world</> : liveItem?.title ?? "Main stage is ready"}</h2>
+            <p>{mode === "demo" ? "Maya Chen, Elias Brooks and Sofia Alvarez unpack responsible innovation." : liveItem ? `${liveItem.owner} · scheduled ${liveItem.scheduledTime}` : "No live agenda item has been started by a producer."}</p>
+            <div className="speaker-row">{mode === "demo" && <AvatarStack />}<span>{mode === "demo" ? "3 speakers · 286 watching" : `${stageCount} in the room`}</span></div>
             <button className="primary-button" onClick={() => openLiveRoom("stage")}>Join main stage<ArrowRight size={17} /></button>
           </div>
           <div className="stage-visual" aria-label="Live speaker preview">
-            {people.map((person, index) => (
+            {mode === "demo" ? demoPeople.map((person, index) => (
               <div className={`speaker-tile speaker-${index + 1}`} key={person.name}>
                 <div className={`speaker-portrait ${person.color}`}>{person.initials}</div>
                 <div className="speaker-label"><i />{person.name}<small>{person.role}</small></div>
               </div>
-            ))}
+            )) : <div className="real-data-stage"><Video size={42} /><strong>Live participant video opens securely in the room</strong><small>No fabricated speaker portraits are shown.</small></div>}
             <div className="signal-lines" />
-            <div className="live-corner"><span>LIVE</span><strong>48:12</strong></div>
+            <div className="live-corner"><span>{mode === "demo" ? "DEMO" : stageCount > 0 ? "LIVE" : venueSnapshot?.mediaAvailable ? "READY" : "OFFLINE"}</span><strong>{mode === "demo" ? "48:12" : stageCount}</strong></div>
           </div>
         </section>
 
@@ -746,13 +966,13 @@ function AttendeeView({
               <button
                 key={item.id}
                 className={`room-card ${item.accent} ${room === item.id ? "selected" : ""}`}
-                onClick={() => item.id === "expo" ? enterRoom(item.id) : openLiveRoom(item.id)}
+                onClick={() => mode === "demo" && item.id === "expo" ? enterRoom(item.id) : openLiveRoom(item.id)}
               >
                 <div className="room-top"><span className="room-icon"><Icon size={19} /></span><span className="room-count"><Users size={13} />{item.count}</span></div>
                 <small>{item.kicker}</small>
                 <strong>{item.title}</strong>
                 <p>{item.description}</p>
-                <span className="room-link">{item.id === "expo" ? "Explore booths" : "Open video lobby"} <ArrowRight size={15} /></span>
+                <span className="room-link">{mode === "demo" && item.id === "expo" ? "Explore demo booths" : "Open video lobby"} <ArrowRight size={15} /></span>
               </button>
             );
           })}
@@ -770,11 +990,11 @@ function AttendeeView({
             <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>{cameraOn ? <Camera size={18} /> : <CameraOff size={18} />}</button>
             <button onClick={() => setChatOpen(!chatOpen)} aria-label="Toggle chat"><MessageSquareText size={18} /></button>
           </div>
-          {room !== "expo" && <button className="join-live-button" onClick={() => openLiveRoom(room)}><Video size={15} />{liveConnected ? "Reopen live room" : "Open video lobby"}</button>}
-          <div className="connection-status"><i /> {liveConnected ? "LiveKit room connected" : "Secure media preflight ready"}</div>
+          {(mode === "live" || room !== "expo") && <button className="join-live-button" onClick={() => openLiveRoom(room)}><Video size={15} />{liveConnected ? "Reopen live room" : "Open video lobby"}</button>}
+          <div className="connection-status"><i /> {mode === "demo" ? "Demo controls only" : liveConnected ? "LiveKit room connected" : venueSnapshot?.mediaAvailable ? "Secure media preflight ready" : venueSnapshot?.mediaError ?? "Checking LiveKit…"}</div>
         </div>
 
-        {room === "expo" ? (
+        {mode === "demo" && room === "expo" ? (
           <div className="expo-spotlight">
             <span className="eyebrow">FEATURED PARTNER</span>
             <div className="lumen-logo">LU<span>MEN</span></div>
@@ -787,22 +1007,31 @@ function AttendeeView({
           <>
             <div className="rail-block">
               <div className="rail-title"><span>UP NEXT</span><Clock3 size={16} /></div>
-              <strong>11:35 · Studio One</strong>
-              <h4>The human side of transformation</h4>
-              <button className="text-button" onClick={() => { enterRoom("studio"); notify("Seat saved for Studio One at 11:35."); }}>Save my seat <ChevronRight size={15} /></button>
+              <strong>{mode === "demo" ? "11:35 · Studio One" : nextItem ? `${nextItem.scheduledTime} · ${nextItem.owner}` : "No upcoming item"}</strong>
+              <h4>{mode === "demo" ? "The human side of transformation" : nextItem?.title ?? "The producer has not published the next agenda item."}</h4>
+              <button className="text-button" onClick={() => openLiveRoom("studio")}>Open Studio One <ChevronRight size={15} /></button>
             </div>
             <div className="rail-block">
-              <div className="rail-title"><span>PEOPLE TO MEET</span><WandSparkles size={16} /></div>
-              <div className="match-person"><span className="mini-avatar violet">NP</span><div><strong>Noor Patel</strong><small>3 shared interests</small></div><button aria-label="Connect with Noor" onClick={() => notify("Connection request sent to Noor Patel.")}><Send size={15} /></button></div>
-              <div className="match-person"><span className="mini-avatar coral">JW</span><div><strong>Jonas Weber</strong><small>Also in responsible AI</small></div><button aria-label="Connect with Jonas" onClick={() => notify("Connection request sent to Jonas Weber.")}><Send size={15} /></button></div>
+              <div className="rail-title"><span>{mode === "demo" ? "DEMO CONNECTIONS" : "NEED HELP?"}</span>{mode === "demo" ? <WandSparkles size={16} /> : <LifeBuoy size={16} />}</div>
+              {mode === "demo" ? (
+                <>
+                  <div className="match-person"><span className="mini-avatar violet">NP</span><div><strong>Noor Patel</strong><small>Demo profile</small></div><button aria-label="Demo connection with Noor" onClick={() => notify("Demo connection request sent. No real message was delivered.")}><Send size={15} /></button></div>
+                  <div className="match-person"><span className="mini-avatar coral">JW</span><div><strong>Jonas Weber</strong><small>Demo profile</small></div><button aria-label="Demo connection with Jonas" onClick={() => notify("Demo connection request sent. No real message was delivered.")}><Send size={15} /></button></div>
+                </>
+              ) : (
+                <>
+                  <p>Create a real ticket for the signed-in producer team.</p>
+                  <button className="secondary-button full" onClick={() => setSupportOpen(true)}><LifeBuoy size={15} />Request support</button>
+                </>
+              )}
             </div>
           </>
         )}
       </aside>
 
-      {chatOpen && (
+      {chatOpen && mode === "demo" && (
         <div className="chat-panel">
-          <div className="chat-head"><div><strong>Stage conversation</strong><small>286 participants</small></div><button onClick={() => setChatOpen(false)} aria-label="Close chat"><X size={18} /></button></div>
+          <div className="chat-head"><div><strong>Demo conversation</strong><small>Sample messages</small></div><button onClick={() => setChatOpen(false)} aria-label="Close chat"><X size={18} /></button></div>
           <div className="chat-messages">
             <p><strong>Priya</strong> The governance point is so important.</p>
             <p><strong>Daniel</strong> Would love the framework Sofia mentioned.</p>
@@ -812,6 +1041,17 @@ function AttendeeView({
           <form className="chat-input" onSubmit={(event) => { event.preventDefault(); sendChatMessage(); }}>
             <input aria-label="Chat message" placeholder="Share a thought…" value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} />
             <button type="submit" aria-label="Send message" disabled={!chatDraft.trim()}><Send size={16} /></button>
+          </form>
+        </div>
+      )}
+      {supportOpen && mode === "live" && (
+        <div className="chat-panel support-request-panel">
+          <div className="chat-head"><div><strong>Request support</strong><small>{activeRoom.title}</small></div><button onClick={() => setSupportOpen(false)} aria-label="Close support request"><X size={18} /></button></div>
+          <form className="support-request-form" onSubmit={(event) => { event.preventDefault(); void submitSupport(); }}>
+            <p>{appUser ? `Signed in as ${appUser.email}` : "Sign in first so producers can respond to you."}</p>
+            <label htmlFor="support-issue">What is happening?</label>
+            <textarea id="support-issue" value={supportIssue} onChange={(event) => setSupportIssue(event.target.value)} minLength={5} maxLength={500} required placeholder="Describe the audio, video, screen-sharing, or access problem." />
+            <button className="primary-button full" type="submit" disabled={supportBusy || supportIssue.trim().length < 5}>{supportBusy ? "Sending…" : "Send to producer queue"}</button>
           </form>
         </div>
       )}
@@ -867,6 +1107,7 @@ function LiveJoinDialog({
   roomTitle,
   roomDescription,
   attendeeCount,
+  defaultName,
   audioEnabled,
   videoEnabled,
   joining,
@@ -877,6 +1118,7 @@ function LiveJoinDialog({
   roomTitle: string;
   roomDescription: string;
   attendeeCount: number;
+  defaultName: string;
   audioEnabled: boolean;
   videoEnabled: boolean;
   joining: boolean;
@@ -900,7 +1142,7 @@ function LiveJoinDialog({
         </div>
         <PreJoin
           className="velocity-prejoin"
-          defaults={{ username: "Alex Morgan", videoEnabled, audioEnabled }}
+          defaults={{ username: defaultName, videoEnabled, audioEnabled }}
           joinLabel={joining ? "Connecting securely…" : "Join conference"}
           micLabel="Microphone"
           camLabel="Camera"
@@ -936,7 +1178,7 @@ function ConnectedLiveRoom({
   leave: () => void;
 }) {
   const copyInvite = async () => {
-    const roomId = connection.roomName.replace("global-innovation-", "");
+    const roomId = VENUE_ROOMS.find((room) => room.roomName === connection.roomName)?.id ?? "stage";
     const invite = `${window.location.origin}/?room=${roomId}`;
     try {
       await navigator.clipboard.writeText(invite);
@@ -997,6 +1239,9 @@ function ConferenceRoomMeta() {
 }
 
 function ProducerView({
+  mode,
+  venueSnapshot,
+  greeting,
   rescueState,
   triggerRescue,
   resetDemo,
@@ -1006,6 +1251,9 @@ function ProducerView({
   producerUser,
   accessToken,
 }: {
+  mode: AppMode;
+  venueSnapshot: VenueSnapshot | null;
+  greeting: string;
   rescueState: "idle" | "moving" | "complete";
   triggerRescue: () => void;
   resetDemo: () => void;
@@ -1016,14 +1264,16 @@ function ProducerView({
   accessToken: string;
 }) {
   const [managedParticipants, setManagedParticipants] = useState<ManagedParticipant[]>([]);
-  const [participantStatus, setParticipantStatus] = useState<"loading" | "ready" | "demo" | "error">("loading");
-  const [persistentRunOfShow, setPersistentRunOfShow] = useState<RunOfShowItem[]>(
-    runOfShow.map((item) => ({ ...item, scheduledTime: item.time })),
-  );
+  const [participantStatus, setParticipantStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [persistentRunOfShow, setPersistentRunOfShow] = useState<RunOfShowItem[]>([]);
   const [persistentEvents, setPersistentEvents] = useState<OperationalEvent[]>([]);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [operationsStatus, setOperationsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [producerSection, setProducerSection] = useState("overview");
   const [showFullLog, setShowFullLog] = useState(false);
   const [integrationBusy, setIntegrationBusy] = useState<"announcement" | "calendar" | null>(null);
+  const [newRunItem, setNewRunItem] = useState({ scheduledTime: "", title: "", owner: "" });
+  const openTickets = supportTickets.filter((ticket) => ticket.status !== "resolved");
 
   const openProducerSection = (section: string, targetId: string) => {
     setProducerSection(section);
@@ -1031,9 +1281,18 @@ function ProducerView({
   };
 
   const refreshOperations = async () => {
+    if (mode === "demo") {
+      setPersistentRunOfShow(demoRunOfShow.map((item) => ({ ...item, scheduledTime: item.time })));
+      setPersistentEvents([]);
+      setSupportTickets([
+        { id: -1, requesterName: "Rina Kapoor", requesterEmail: "demo@example.com", roomName: "Studio One", issue: "Can’t share screen", status: "open", assignedTo: "", createdAt: new Date().toISOString() },
+        { id: -2, requesterName: "David Mills", requesterEmail: "demo@example.com", roomName: "Green room", issue: "Audio echo", status: "open", assignedTo: "", createdAt: new Date().toISOString() },
+      ]);
+      setOperationsStatus("ready");
+      return;
+    }
+    setOperationsStatus("loading");
     try {
-      // D1-backed state replaces the initial demo timeline when available.
-      // A failed refresh deliberately leaves the last visible state intact.
       const response = await fetch("/api/producer/operations", {
         cache: "no-store",
         headers: { authorization: `Bearer ${accessToken}` },
@@ -1041,27 +1300,37 @@ function ProducerView({
       const payload = await response.json() as {
         runOfShow?: RunOfShowItem[];
         activity?: OperationalEvent[];
+        supportTickets?: SupportTicket[];
       };
-      if (response.ok) {
-        if (payload.runOfShow?.length) setPersistentRunOfShow(payload.runOfShow);
-        setPersistentEvents(payload.activity ?? []);
-      }
+      if (!response.ok) throw new Error("Operations request failed");
+      setPersistentRunOfShow(payload.runOfShow ?? []);
+      setPersistentEvents(payload.activity ?? []);
+      setSupportTickets(payload.supportTickets ?? []);
+      setOperationsStatus("ready");
     } catch {
-      // The producer dashboard retains its demo data when D1 is unavailable.
+      setPersistentRunOfShow([]);
+      setPersistentEvents([]);
+      setSupportTickets([]);
+      setOperationsStatus("error");
     }
   };
 
   const refreshParticipants = async () => {
+    if (mode === "demo") {
+      setManagedParticipants([]);
+      setParticipantStatus("ready");
+      return;
+    }
     setParticipantStatus("loading");
     try {
-      const response = await fetch("/api/producer/room?room=global-innovation-stage", {
+      const response = await fetch("/api/producer/room?room=velocity-venue-stage", {
         cache: "no-store",
         headers: { authorization: `Bearer ${accessToken}` },
       });
       const payload = (await response.json()) as { participants?: ManagedParticipant[] };
       if (!response.ok) {
         setManagedParticipants([]);
-        setParticipantStatus(response.status === 503 ? "demo" : "error");
+        setParticipantStatus("error");
         return;
       }
       setManagedParticipants(payload.participants ?? []);
@@ -1079,7 +1348,7 @@ function ProducerView({
     return () => window.clearTimeout(timer);
     // These loaders intentionally run once when the authenticated producer view opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mode]);
 
   const selectRunItem = async (index: number, item: RunOfShowItem) => {
     // Optimistic state gives the show caller immediate feedback. The following
@@ -1090,7 +1359,7 @@ function ProducerView({
       status: candidateIndex < index ? "done" : candidateIndex === index ? "live" : candidateIndex === index + 1 ? "next" : "queued",
     })));
     if (!item.id) {
-      notify("Run of show advanced in demo mode.");
+      notify("Demo run of show advanced. No live schedule changed.");
       return;
     }
     try {
@@ -1102,10 +1371,59 @@ function ProducerView({
         },
         body: JSON.stringify({ action: "set-run-status", itemId: item.id, status: "live" }),
       });
-      notify(response.ok ? "Run-of-show change saved." : "Run-of-show change is visible but could not be saved.");
-      if (response.ok) await refreshOperations();
+      if (!response.ok) throw new Error("Schedule update failed");
+      notify("Run-of-show change saved.");
+      await refreshOperations();
     } catch {
-      notify("Run-of-show change is visible but could not be saved.");
+      notify("Run-of-show change could not be saved; live data was reloaded.");
+      await refreshOperations();
+    }
+  };
+
+  const addRunOfShowItem = async () => {
+    if (mode === "demo") {
+      notify("Schedule editing is disabled in Demo mode.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/producer/operations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ action: "add-run-item", ...newRunItem }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Schedule item could not be added.");
+      setNewRunItem({ scheduledTime: "", title: "", owner: "" });
+      await refreshOperations();
+      notify("Agenda item published.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Agenda item could not be added.");
+    }
+  };
+
+  const updateSupportTicket = async (ticket: SupportTicket, status: SupportTicket["status"]) => {
+    if (mode === "demo") {
+      setSupportTickets((current) => current.map((item) => item.id === ticket.id ? { ...item, status } : item));
+      notify("Demo ticket updated. No attendee was contacted.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/producer/operations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ action: "update-support", ticketId: ticket.id, status }),
+      });
+      if (!response.ok) throw new Error("Ticket update failed");
+      await refreshOperations();
+      notify(status === "resolved" ? "Support ticket resolved." : "Support ticket assigned to you.");
+    } catch {
+      notify("The support ticket could not be updated.");
     }
   };
 
@@ -1123,8 +1441,6 @@ function ProducerView({
           channel,
           message,
           roomName: "Main Stage",
-          startsAt: "2026-07-31T11:00:00Z",
-          endsAt: "2026-07-31T12:00:00Z",
         }),
       });
       const payload = await response.json() as { configured?: boolean };
@@ -1144,19 +1460,43 @@ function ProducerView({
   };
 
   const sendAnnouncement = async () => {
+    if (mode === "demo") {
+      notify("Demo announcement sent. No external channels or attendees were contacted.");
+      return;
+    }
+    const message = window.prompt("Announcement for all attendees");
+    if (!message?.trim()) return;
     setIntegrationBusy("announcement");
-    const message = "Global Innovation Summit: producer announcement from Main Stage.";
+    const persisted = await fetch("/api/producer/operations", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ action: "announce", message: message.trim() }),
+    });
+    if (!persisted.ok) {
+      notify("The announcement could not be published.");
+      setIntegrationBusy(null);
+      return;
+    }
     const results = await Promise.all([
-      sendIntegration("slack", message),
-      sendIntegration("teams", message),
+      sendIntegration("slack", message.trim()),
+      sendIntegration("teams", message.trim()),
     ]);
-    if (results.every(Boolean)) notify("Announcement delivered to Slack and Teams.");
+    notify(results.some(Boolean) ? "Announcement published and delivered to connected channels." : "Announcement published in the venue. External channels are not configured.");
+    await refreshOperations();
     setIntegrationBusy(null);
   };
 
   const syncCalendar = async () => {
+    if (mode === "demo") {
+      notify("Demo calendar sync complete. No calendar was changed.");
+      return;
+    }
     setIntegrationBusy("calendar");
-    await sendIntegration("calendar", "Global Innovation Summit — Main Stage");
+    const current = persistentRunOfShow.find((item) => item.status === "live");
+    await sendIntegration("calendar", current ? `${current.title} — ${current.owner}` : "Velocity Venue — Main Stage");
     setIntegrationBusy(null);
   };
 
@@ -1170,7 +1510,7 @@ function ProducerView({
           "content-type": "application/json",
           authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ action, room: "global-innovation-stage", identity: participant.identity, trackSid: participant.audioTrackSid }),
+        body: JSON.stringify({ action, room: "velocity-venue-stage", identity: participant.identity, trackSid: participant.audioTrackSid }),
       });
       if (!response.ok) {
         notify("The producer action could not be completed.");
@@ -1186,7 +1526,7 @@ function ProducerView({
   return (
     <div className="producer-layout">
       <aside className="producer-nav">
-        <div className="producer-label">PRODUCER MODE</div>
+        <div className="producer-label">{mode === "demo" ? "PRODUCER · DEMO DATA" : "PRODUCER · LIVE DATA"}</div>
         <button className={`producer-nav-item ${producerSection === "overview" ? "active" : ""}`} onClick={() => openProducerSection("overview", "producer-overview")}><LayoutDashboard size={18} />Show overview</button>
         <button className={`producer-nav-item ${producerSection === "run" ? "active" : ""}`} onClick={() => openProducerSection("run", "producer-run-show")}><TimerReset size={18} />Run of show</button>
         <button className={`producer-nav-item ${producerSection === "rooms" ? "active" : ""}`} onClick={() => openProducerSection("rooms", "producer-rooms")}><Video size={18} />Rooms & stages</button>
@@ -1194,56 +1534,65 @@ function ProducerView({
         <button className={`producer-nav-item ${producerSection === "engagement" ? "active" : ""}`} onClick={() => openProducerSection("engagement", "producer-activity")}><MessageSquareText size={18} />Engagement</button>
         <button className={`producer-nav-item ${producerSection === "data" ? "active" : ""}`} onClick={() => openProducerSection("data", "producer-metrics")}><Gauge size={18} />Event data</button>
         <div className="nav-divider" />
-        <button className={`producer-nav-item ${producerSection === "support" ? "active" : ""}`} onClick={() => openProducerSection("support", "producer-support")}><LifeBuoy size={18} />Support queue <span>2</span></button>
-        <div className="event-health"><div><HeartPulse size={17} /><span>EVENT HEALTH</span></div><strong>99.8%</strong><small>All critical systems normal</small></div>
+        <button className={`producer-nav-item ${producerSection === "support" ? "active" : ""}`} onClick={() => openProducerSection("support", "producer-support")}><LifeBuoy size={18} />Support queue <span>{openTickets.length}</span></button>
+        <div className="event-health"><div><HeartPulse size={17} /><span>EVENT SERVICES</span></div><strong>{mode === "demo" ? "DEMO" : venueSnapshot?.mediaAvailable && operationsStatus === "ready" ? "READY" : "CHECK"}</strong><small>{mode === "demo" ? "No live systems affected" : venueSnapshot?.mediaAvailable ? operationsStatus === "ready" ? "Media and operations connected" : "Operations data unavailable" : venueSnapshot?.mediaError ?? "Checking services"}</small></div>
       </aside>
 
       <section className="command-content">
         <div className="command-heading scroll-target" id="producer-overview">
-          <div><span className="eyebrow"><Radio size={13} /> SHOW IS LIVE · SIGNED IN</span><h1>Good morning, {producerUser.displayName.split(" ")[0]}.</h1><p>You’re 24 minutes into the program. Everything is on time.</p></div>
+          <div><span className="eyebrow"><Radio size={13} /> {mode === "demo" ? "DEMO MODE" : "LIVE OPERATIONS"} · SIGNED IN</span><h1>{greeting}, {producerUser.displayName.split(" ")[0]}.</h1><p>{mode === "demo" ? "Explore the producer workflow without changing live systems." : `${venueSnapshot?.totalParticipants ?? 0} participants are connected across ${venueSnapshot?.activeRooms ?? 0} rooms.`}</p></div>
           <div className="command-actions"><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void sendAnnouncement()}><Bell size={16} />{integrationBusy === "announcement" ? "Sending…" : "Send announcement"}</button><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void syncCalendar()}><CalendarDays size={15} />{integrationBusy === "calendar" ? "Syncing…" : "Sync calendar"}</button><button className="primary-button" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink size={15} />Open attendee view</button></div>
         </div>
 
         {rescueState !== "idle" && (
           <div className={`rescue-banner ${rescueState}`}>
             <div className="rescue-symbol">{rescueState === "moving" ? <Zap size={24} /> : <ShieldCheck size={24} />}</div>
-            <div><span>{rescueState === "moving" ? "RESCUE MODE ACTIVE" : "RECOVERY COMPLETE"}</span><strong>{rescueState === "moving" ? "Moving the audience to Main Stage Backup…" : "286 attendees reconnected in 7 seconds"}</strong><small>{rescueState === "moving" ? "Conference state is preserved. No attendee action required." : "Chat, agenda and engagement history remained available."}</small></div>
-            {rescueState === "complete" && <button onClick={resetDemo}>Reset recovery</button>}
+            <div><span>{rescueState === "moving" ? "RESCUE MODE ACTIVE" : "RECOVERY COMPLETE"}</span><strong>{rescueState === "moving" ? "Moving current Main Stage participants to backup…" : mode === "demo" ? "Demo recovery completed" : "LiveKit participant movement completed"}</strong><small>{mode === "demo" ? "No live participants were affected." : "The result is recorded in the operational audit log."}</small></div>
+            {mode === "demo" && rescueState === "complete" && <button onClick={resetDemo}>Reset demo</button>}
           </div>
         )}
 
         <div className="metric-grid scroll-target" id="producer-metrics">
-          <MetricCard label="ATTENDEES ONLINE" value="431" change="+38 in 10 min" icon={Users} tone="cyan" />
-          <MetricCard label="ACTIVE ROOMS" value="4 / 6" change="2 scheduled later" icon={Radio} tone="violet" />
-          <MetricCard label="OPEN SUPPORT" value="2" change="Median reply 0:42" icon={LifeBuoy} tone="coral" />
-          <MetricCard label="ENGAGEMENT" value="87%" change="Above event target" icon={Activity} tone="lime" />
+          <MetricCard label="ATTENDEES ONLINE" value={String(mode === "demo" ? 431 : venueSnapshot?.totalParticipants ?? 0)} change={mode === "demo" ? "Demo value" : venueSnapshot?.mediaAvailable ? "LiveKit live count" : "Media unavailable"} icon={Users} tone="cyan" />
+          <MetricCard label="ACTIVE ROOMS" value={mode === "demo" ? "4 / 6" : `${venueSnapshot?.activeRooms ?? 0} / ${VENUE_ROOMS.length}`} change={mode === "demo" ? "Demo value" : "Rooms with participants"} icon={Radio} tone="violet" />
+          <MetricCard label="OPEN SUPPORT" value={String(openTickets.length)} change={mode === "demo" ? "Demo tickets" : "Persisted D1 tickets"} icon={LifeBuoy} tone="coral" />
+          <MetricCard label="RECORDED ACTIONS" value={String(mode === "demo" ? events.length : persistentEvents.length)} change={mode === "demo" ? "Demo activity" : "D1 audit records loaded"} icon={Activity} tone="lime" />
         </div>
 
         <div className="command-grid">
           <section className="panel run-panel scroll-target" id="producer-run-show">
-            <div className="panel-head"><div><span className="eyebrow">LIVE CONTROL</span><h2>Run of show</h2></div><span className="on-time"><Check size={13} />ON TIME</span></div>
+            <div className="panel-head"><div><span className="eyebrow">{mode === "demo" ? "DEMO CONTROL" : "LIVE CONTROL"}</span><h2>Run of show</h2></div><span className="on-time"><Check size={13} />{persistentRunOfShow.find((item) => item.status === "live") ? "ITEM LIVE" : "NO LIVE ITEM"}</span></div>
             <div className="ros-list">
+              {operationsStatus === "error" && mode === "live" && <p className="empty-state">The persisted schedule is unavailable. No demo schedule is being substituted.</p>}
+              {operationsStatus === "ready" && persistentRunOfShow.length === 0 && <p className="empty-state">No agenda items have been published yet.</p>}
               {persistentRunOfShow.map((item, index) => (
                 <button key={item.id ?? item.scheduledTime} className={`ros-item ${item.status === "live" ? "active" : ""} ${item.status === "done" ? "done" : ""}`} onClick={() => void selectRunItem(index, item)}>
                   <span className="ros-time">{item.scheduledTime}</span><span className="ros-line"><i /></span><span className="ros-copy"><strong>{item.title}</strong><small>{item.owner}</small></span><span className="ros-status">{item.status === "done" ? <Check size={14} /> : item.status === "live" ? "LIVE" : item.status === "next" ? "NEXT" : ""}</span>
                 </button>
               ))}
             </div>
-            <div className="cue-actions"><span>Quick cue</span><button onClick={() => notify("“Stand by” sent privately to the next speaker.")}>Stand by</button><button onClick={() => notify("“2 minutes” sent privately to all active speakers.")}>2 minutes</button><button onClick={() => notify("“Wrap up” sent privately to the active speaker.")}>Wrap up</button></div>
+            {mode === "live" && (
+              <form className="run-item-form" onSubmit={(event) => { event.preventDefault(); void addRunOfShowItem(); }}>
+                <span>Add agenda item</span>
+                <input type="time" aria-label="Agenda time" value={newRunItem.scheduledTime} onChange={(event) => setNewRunItem((current) => ({ ...current, scheduledTime: event.target.value }))} required />
+                <input aria-label="Agenda title" placeholder="Session title" value={newRunItem.title} onChange={(event) => setNewRunItem((current) => ({ ...current, title: event.target.value }))} required />
+                <input aria-label="Agenda owner" placeholder="Owner or speaker" value={newRunItem.owner} onChange={(event) => setNewRunItem((current) => ({ ...current, owner: event.target.value }))} required />
+                <button type="submit">Publish</button>
+              </form>
+            )}
           </section>
 
           <section className="panel room-health-panel scroll-target" id="producer-rooms">
             <div className="panel-head"><div><span className="eyebrow">ROOM MONITOR</span><h2>Live spaces</h2></div><button className="icon-button" aria-label="Refresh room monitor" onClick={() => void refreshParticipants()}><TimerReset size={18} /></button></div>
             <div className="health-room">
-              <div className="health-room-head"><span className="health-icon coral"><Radio size={16} /></span><div><strong>Main Stage</strong><small>Live · 286 attendees</small></div><StatusPill tone="healthy">Healthy</StatusPill></div>
-              <div className="health-stats"><span><i className="green" />Media <strong>Excellent</strong></span><span>Latency <strong>112 ms</strong></span><span>Speakers <strong>3 / 3</strong></span></div>
-              <div className="health-actions"><button onClick={() => { void refreshParticipants(); openProducerSection("speakers", "producer-participants"); }}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={triggerRescue} disabled={rescueState !== "idle"}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
+              <div className="health-room-head"><span className="health-icon coral"><Radio size={16} /></span><div><strong>Main Stage</strong><small>{mode === "demo" ? "Demo · 286 attendees" : `${venueSnapshot?.rooms.find((item) => item.id === "stage")?.participantCount ?? 0} live participants`}</small></div><StatusPill tone={mode === "demo" || venueSnapshot?.mediaAvailable ? "healthy" : "warning"}>{mode === "demo" ? "Demo" : venueSnapshot?.mediaAvailable ? "Connected" : "Unavailable"}</StatusPill></div>
+              <div className="health-stats"><span><i className={venueSnapshot?.mediaAvailable || mode === "demo" ? "green" : ""} />Media <strong>{mode === "demo" ? "Demo" : venueSnapshot?.mediaAvailable ? "Connected" : "Unavailable"}</strong></span><span>Source <strong>{mode === "demo" ? "Sample" : "LiveKit API"}</strong></span><span>Loaded <strong>{mode === "demo" ? 3 : managedParticipants.length}</strong></span></div>
+              <div className="health-actions"><button onClick={() => { void refreshParticipants(); openProducerSection("speakers", "producer-participants"); }}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={triggerRescue} disabled={rescueState !== "idle" || (mode === "live" && !venueSnapshot?.mediaAvailable)}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
               <div className="live-participants scroll-target" id="producer-participants">
                 <div><strong>LIVEKIT PARTICIPANTS</strong><button onClick={refreshParticipants}>Refresh</button></div>
                 {participantStatus === "loading" && <p>Checking the live room…</p>}
-                {participantStatus === "demo" && <p>Demo data shown until LiveKit credentials are connected.</p>}
                 {participantStatus === "error" && <p>Live participant status is temporarily unavailable.</p>}
-                {participantStatus === "ready" && managedParticipants.length === 0 && <p>The live room is ready and currently empty.</p>}
+                {participantStatus === "ready" && managedParticipants.length === 0 && <p>{mode === "demo" ? "Demo participant controls do not affect real users." : "The live room is currently empty."}</p>}
                 {managedParticipants.slice(0, 4).map((participant) => (
                   <div className="managed-participant" key={participant.identity}>
                     <span className="mini-avatar cyan">{participant.name.slice(0, 2).toUpperCase()}</span>
@@ -1254,9 +1603,11 @@ function ProducerView({
                 ))}
               </div>
             </div>
-            <div className="health-room compact-room"><span className="health-icon violet"><MonitorUp size={16} /></span><div><strong>Studio One</strong><small>Green room · 5 speakers</small></div><span className="ready-state"><i />Ready</span></div>
-            <div className="health-room compact-room"><span className="health-icon lime"><Store size={16} /></span><div><strong>Partner Expo</strong><small>12 booths · 61 attendees</small></div><span className="ready-state"><i />Open</span></div>
-            <div className="health-room compact-room warning"><span className="health-icon cyan"><Users size={16} /></span><div><strong>Connection Lounge</strong><small>18 open seats</small></div><span className="ready-state amber"><i />Review</span></div>
+            {(mode === "demo" ? demoRooms : liveRoomPresentation).filter((item) => item.id !== "stage").map((item) => {
+              const count = mode === "demo" ? "count" in item ? item.count : 0 : venueSnapshot?.rooms.find((room) => room.id === item.id)?.participantCount ?? 0;
+              const Icon = item.icon;
+              return <div className="health-room compact-room" key={item.id}><span className={`health-icon ${item.accent}`}><Icon size={16} /></span><div><strong>{item.title}</strong><small>{count} {mode === "demo" ? "demo attendees" : "live participants"}</small></div><span className="ready-state"><i />{mode === "demo" ? "Demo" : count > 0 ? "Active" : "Empty"}</span></div>;
+            })}
           </section>
         </div>
 
@@ -1266,13 +1617,24 @@ function ProducerView({
             <div className="event-list">
               {persistentEvents.length > 0
                 ? persistentEvents.slice(0, showFullLog ? persistentEvents.length : 4).map((event, index) => <div className="event-row" key={event.id ?? index}><span>{event.createdAt ? new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "NOW"}</span><i className={event.action?.includes("rescue") ? "warn" : "good"} /><strong>{event.detail || event.action}</strong></div>)
-                : events.slice(0, showFullLog ? events.length : 4).map((event, index) => <div className="event-row" key={`${event.time}-${index}`}><span>{event.time}</span><i className={event.tone} /><strong>{event.text}</strong></div>)}
+                : mode === "demo"
+                  ? events.slice(0, showFullLog ? events.length : 4).map((event, index) => <div className="event-row" key={`${event.time}-${index}`}><span>{event.time}</span><i className={event.tone} /><strong>{event.text}</strong></div>)
+                  : <p className="empty-state">{operationsStatus === "error" ? "The audit log is unavailable." : "No producer actions have been recorded yet."}</p>}
             </div>
           </section>
           <section className="panel support-panel scroll-target" id="producer-support">
-            <div className="panel-head"><div><span className="eyebrow">NEEDS ATTENTION</span><h2>Support queue</h2></div><span className="queue-count">2 OPEN</span></div>
-            <div className="support-ticket"><span className="mini-avatar coral">RK</span><div><strong>Rina Kapoor</strong><small>Can’t share screen · Studio One</small></div><button onClick={() => notify("You joined Rina’s private support room.")}>Join</button></div>
-            <div className="support-ticket"><span className="mini-avatar violet">DM</span><div><strong>David Mills</strong><small>Audio echo · Green room</small></div><button onClick={() => notify("You joined David’s private support room.")}>Join</button></div>
+            <div className="panel-head"><div><span className="eyebrow">NEEDS ATTENTION</span><h2>Support queue</h2></div><span className="queue-count">{openTickets.length} OPEN</span></div>
+            {operationsStatus === "error" && mode === "live" && <p className="empty-state">The persisted support queue is unavailable.</p>}
+            {operationsStatus === "ready" && supportTickets.length === 0 && <p className="empty-state">No attendee support requests.</p>}
+            {supportTickets.map((ticket) => (
+              <div className={`support-ticket ${ticket.status}`} key={ticket.id}>
+                <span className="mini-avatar coral">{ticket.requesterName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                <div><strong>{ticket.requesterName}</strong><small>{ticket.issue} · {ticket.roomName} · {ticket.status.replace("_", " ")}</small></div>
+                {ticket.status === "open" && <button onClick={() => void updateSupportTicket(ticket, "in_progress")}>Assign to me</button>}
+                {ticket.status === "in_progress" && <button onClick={() => void updateSupportTicket(ticket, "resolved")}>Resolve</button>}
+                {ticket.status === "resolved" && <span className="ready-state"><i />Resolved</span>}
+              </div>
+            ))}
           </section>
         </div>
       </section>
