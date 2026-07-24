@@ -71,3 +71,21 @@ test("provides calendar, team messaging, and CRM adapters", async () => {
   assert.match(leadsRoute, /dispatchCrmLead/);
   assert.match(envExample, /CRM_PROVIDER=/);
 });
+
+test("ships operator and maintainer documentation", async () => {
+  const [productDocs, readme, architecture, api, deployment, operations] = await Promise.all([
+    readFile(new URL("app/docs/page.tsx", root), "utf8"),
+    readFile(new URL("README.md", root), "utf8"),
+    readFile(new URL("docs/ARCHITECTURE.md", root), "utf8"),
+    readFile(new URL("docs/API.md", root), "utf8"),
+    readFile(new URL("docs/DEPLOYMENT.md", root), "utf8"),
+    readFile(new URL("docs/OPERATIONS.md", root), "utf8"),
+  ]);
+  assert.match(productDocs, /Operate the venue with confidence/);
+  assert.match(productDocs, /Failure and recovery/);
+  assert.match(readme, /Documentation/);
+  assert.match(architecture, /Trust boundaries/);
+  assert.match(api, /Error conventions/);
+  assert.match(deployment, /Rollback/);
+  assert.match(operations, /Rescue Mode/);
+});

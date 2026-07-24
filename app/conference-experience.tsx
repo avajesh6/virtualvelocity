@@ -149,6 +149,8 @@ function StatusPill({ children, tone = "live" }: { children: React.ReactNode; to
 }
 
 export function ConferenceExperience() {
+  // The attendee and producer experiences share one shell so a producer can
+  // inspect the attendee surface without losing the authenticated session.
   const [role, setRole] = useState<Role>("attendee");
   const [producerUser, setProducerUser] = useState<ProducerUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -183,6 +185,8 @@ export function ConferenceExperience() {
   }, [notice]);
 
   useEffect(() => {
+    // Supabase owns browser session refresh. This effect mirrors only the
+    // verified, server-derived role into application state.
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
       queueMicrotask(() => setAuthReady(true));
@@ -198,6 +202,8 @@ export function ConferenceExperience() {
         return;
       }
       try {
+        // Never derive producer access from the JWT in the browser. The server
+        // verifies the token and applies metadata/allowlist authorization.
         const response = await fetch("/api/auth/me", {
           headers: { authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -307,6 +313,8 @@ export function ConferenceExperience() {
   };
 
   const captureLead = async () => {
+    // The lead endpoint reports persistence and routing separately; the
+    // attendee interaction stays simple while the server handles fan-out.
     setLeadSending(true);
     try {
       const response = await fetch("/api/leads", {
@@ -341,6 +349,8 @@ export function ConferenceExperience() {
     let moved = 286;
     let liveRecovery = false;
     try {
+      // LiveKit recovery and D1 incident logging are orchestrated server-side.
+      // The browser owns only progress feedback and the demo fallback.
       const response = await fetch("/api/producer/room", {
         method: "POST",
         headers: {
@@ -358,6 +368,9 @@ export function ConferenceExperience() {
       // The visual recovery remains available as a clearly labelled demo fallback.
     }
     window.setTimeout(() => {
+      // A short transition makes the simulated path understandable. Real
+      // recovery uses a shorter acknowledgement because the API already waited
+      // for participant movement results.
       setRescueState("complete");
       setEvents((current) => [
         { time: "11:27:09", text: liveRecovery ? `${moved} live participants moved to Main Stage Backup` : "Demo recovery completed for 286 attendees", tone: "good" },
@@ -387,6 +400,8 @@ export function ConferenceExperience() {
     setLiveError(null);
     try {
       const roomName = `global-innovation-${room}`;
+      // Request a room-scoped token immediately before joining; tokens are not
+      // stored in localStorage or reused across venue spaces.
       const response = await fetch("/api/livekit-token", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -535,7 +550,7 @@ function AttendeeView({
           <button className="nav-item"><Store size={20} /><span>Expo</span></button>
         </div>
         <div>
-          <button className="nav-item"><CircleHelp size={20} /><span>Help</span></button>
+          <button className="nav-item" onClick={() => window.location.assign("/docs")}><CircleHelp size={20} /><span>Help</span></button>
         </div>
       </aside>
 
@@ -787,6 +802,8 @@ function ProducerView({
 
   const refreshOperations = async () => {
     try {
+      // D1-backed state replaces the initial demo timeline when available.
+      // A failed refresh deliberately leaves the last visible state intact.
       const response = await fetch("/api/producer/operations", {
         cache: "no-store",
         headers: { authorization: `Bearer ${accessToken}` },
@@ -835,6 +852,8 @@ function ProducerView({
   }, []);
 
   const selectRunItem = async (index: number, item: RunOfShowItem) => {
+    // Optimistic state gives the show caller immediate feedback. The following
+    // request persists and normalizes all surrounding timeline statuses.
     setActiveRos(index);
     setPersistentRunOfShow((current) => current.map((candidate, candidateIndex) => ({
       ...candidate,
@@ -857,6 +876,8 @@ function ProducerView({
   };
 
   const sendIntegration = async (channel: "calendar" | "slack" | "teams", message: string) => {
+    // Integration URLs remain server-side. The client receives only delivery
+    // classification suitable for a producer-facing status message.
     const response = await fetch("/api/producer/integrations", {
       method: "POST",
       headers: {
@@ -883,6 +904,8 @@ function ProducerView({
   };
 
   const manageParticipant = async (action: "remove" | "mute", participant: ManagedParticipant) => {
+    // Participant identity and audio track SID come from the latest server
+    // snapshot, reducing the chance of acting on stale LiveKit state.
     const response = await fetch("/api/producer/room", {
       method: "POST",
       headers: {

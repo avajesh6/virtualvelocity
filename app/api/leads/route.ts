@@ -20,6 +20,8 @@ export async function POST(request: Request) {
 
   let persisted = false;
   try {
+    // D1 is the durable lead source. Local previews without a binding remain
+    // demonstrable, but the response explicitly reports persisted: false.
     const db = getDb();
     await db.insert(leads).values({
       name: payload.name!.trim(),
@@ -35,6 +37,8 @@ export async function POST(request: Request) {
   }
 
   const crm = await dispatchCrmLead({
+    // CRM delivery is independent of D1 persistence so a temporary failure in
+    // either destination does not discard the other successful write.
     source: "velocity-venue",
     ...payload,
     capturedAt: new Date().toISOString(),

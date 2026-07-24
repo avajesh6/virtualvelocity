@@ -1,5 +1,11 @@
 import { AccessToken } from "livekit-server-sdk";
 
+/**
+ * Issues least-scope LiveKit grants to attendee browsers.
+ *
+ * LiveKit API credentials never cross this boundary. The browser receives only
+ * a short-lived JWT for one allowlisted event room.
+ */
 export async function POST(request: Request) {
   let body: { identity?: string; room?: string };
   try {
@@ -12,6 +18,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "identity and room are required" }, { status: 400 });
   }
   if (identity.trim().length > 64 || !/^global-innovation-(stage|studio|lounge)$/.test(room.trim())) {
+    // Room allowlisting prevents a caller from using this public endpoint to
+    // mint tokens for unrelated rooms in the same LiveKit project.
     return Response.json({ error: "Invalid identity or room." }, { status: 400 });
   }
 
@@ -27,6 +35,8 @@ export async function POST(request: Request) {
     name: identity.trim(),
     ttl: "1h",
   });
+  // Attendees need publish and subscribe for two-way conference participation.
+  // Administrative capabilities are intentionally omitted.
   token.addGrant({ roomJoin: true, room: room.trim(), canPublish: true, canSubscribe: true });
   return Response.json(
     { token: await token.toJwt(), serverUrl },

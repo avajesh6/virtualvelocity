@@ -53,6 +53,15 @@ set TEST_BASE_URL=http://localhost:3000 && npm run test:live
 
 The live HTTP suite checks failure handling and a 25-request concurrent smoke load against a running preview or deployed URL.
 
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) — components, trust boundaries, data flow, and failure model
+- [API reference](docs/API.md) — public and producer endpoints, payloads, and errors
+- [Deployment guide](docs/DEPLOYMENT.md) — environment, migrations, validation, deployment, and rollback
+- [Operations runbook](docs/OPERATIONS.md) — rehearsal, live-event, rescue, troubleshooting, and post-event procedures
+
+The deployed application also includes a user-facing guide at `/docs`, available from the attendee Help navigation.
+
 ## Production status
 
 - Producer authentication and role-based permissions: complete

@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+// Attendee intent captured at expo booths. Keep provider-specific CRM fields
+// out of the core schema so the same record can feed multiple adapters.
 export const leads = sqliteTable("leads", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
@@ -12,6 +14,7 @@ export const leads = sqliteTable("leads", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+// Incidents describe service-impacting events and their recovery outcome.
 export const incidents = sqliteTable("incidents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   eventName: text("event_name").notNull(),
@@ -23,6 +26,8 @@ export const incidents = sqliteTable("incidents", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+// Append-only operational history. Mutable state belongs in its domain table;
+// this record answers who performed an action, what changed, and when.
 export const auditEvents = sqliteTable("audit_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   eventName: text("event_name").notNull(),
@@ -33,6 +38,8 @@ export const auditEvents = sqliteTable("audit_events", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+// Producer-controlled timeline. Position is event-relative and status is one of
+// done/live/next/queued as enforced by the operations route.
 export const runOfShowItems = sqliteTable("run_of_show_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   eventName: text("event_name").notNull(),

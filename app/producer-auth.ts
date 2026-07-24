@@ -1,5 +1,10 @@
 import { createClient, type User } from "@supabase/supabase-js";
 
+/**
+ * Public profile returned to the browser after Supabase has verified a session.
+ * Keep this deliberately small: raw Supabase metadata should not become part of
+ * the application's client contract.
+ */
 export type AppUser = {
   displayName: string;
   email: string;
@@ -7,12 +12,16 @@ export type AppUser = {
 };
 
 function getBearerToken(request: Request) {
+  // Protected API routes use the access token from the active browser session.
+  // Reject malformed schemes early instead of forwarding arbitrary header data.
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) return null;
   return authorization.slice("Bearer ".length).trim();
 }
 
 function displayNameFor(user: User) {
+  // Identity providers use different metadata keys. Email local-part is a safe,
+  // deterministic fallback when the optional human-readable name is absent.
   const metadataName = user.user_metadata.full_name ?? user.user_metadata.name;
   if (typeof metadataName === "string" && metadataName.trim()) {
     return metadataName.trim();
@@ -21,6 +30,8 @@ function displayNameFor(user: User) {
 }
 
 function producerEmails() {
+  // Normalize once so allowlist comparison is case-insensitive and whitespace
+  // in a comma-separated deployment secret cannot accidentally deny access.
   return (process.env.PRODUCER_EMAILS ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
@@ -28,6 +39,8 @@ function producerEmails() {
 }
 
 function isProducer(user: User) {
+  // app_metadata is server-managed in Supabase and therefore preferred over
+  // user-editable metadata. The allowlist supports small test deployments.
   const appRole = user.app_metadata.role;
   if (appRole === "admin" || appRole === "producer") return true;
   return Boolean(user.email && producerEmails().includes(user.email.toLowerCase()));
@@ -59,12 +72,16 @@ export async function authenticateRequest(
 
   const supabase = createClient(url, publishableKey, {
     auth: {
+      // This client exists for one server request. Session persistence and
+      // refresh behavior belong to the browser client, not the Worker.
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false,
     },
   });
   const { data, error } = await supabase.auth.getUser(token);
+  // getUser performs authoritative token validation with Supabase. Decoding the
+  // JWT locally would not confirm revocation or account state.
   if (error || !data.user?.email) {
     return {
       error: Response.json(
@@ -85,6 +102,8 @@ export async function authenticateRequest(
 }
 
 export async function authorizeProducerRequest(request: Request) {
+  // Authentication and authorization remain separate so attendee-authenticated
+  // endpoints can reuse authenticateRequest without inheriting producer access.
   const auth = await authenticateRequest(request);
   if ("error" in auth) return auth;
   if (auth.user.role !== "producer") {

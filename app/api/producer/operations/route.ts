@@ -4,6 +4,8 @@ import { auditEvents, incidents, runOfShowItems } from "../../../../db/schema";
 import { authorizeProducerRequest } from "../../../producer-auth";
 
 const EVENT_NAME = "Global Innovation Summit 2026";
+// The default program makes a fresh event database immediately usable. Once
+// seeded, D1 becomes the authoritative source for status and ordering.
 const DEFAULT_RUN_OF_SHOW = [
   { scheduledTime: "11:00", title: "Opening film", owner: "Playback", status: "done" },
   { scheduledTime: "11:03", title: "Welcome & context", owner: "Maya Chen", status: "done" },
@@ -16,6 +18,7 @@ async function ensureRunOfShow(actorEmail: string) {
   const db = getDb();
   const existing = await db.select().from(runOfShowItems)
     .where(eq(runOfShowItems.eventName, EVENT_NAME)).limit(1);
+  // Idempotent initialization avoids duplicate schedules across cold starts.
   if (existing.length) return;
   await db.insert(runOfShowItems).values(DEFAULT_RUN_OF_SHOW.map((item, position) => ({
     eventName: EVENT_NAME,
@@ -31,6 +34,8 @@ export async function GET(request: Request) {
   try {
     await ensureRunOfShow(auth.user.email);
     const db = getDb();
+    // These independent reads run concurrently to keep command-center refreshes
+    // fast even when the D1 database is in a distant region.
     const [runOfShow, activity, incidentLog] = await Promise.all([
       db.select().from(runOfShowItems)
         .where(eq(runOfShowItems.eventName, EVENT_NAME))
@@ -73,6 +78,8 @@ export async function POST(request: Request) {
       const items = await db.select().from(runOfShowItems)
         .where(eq(runOfShowItems.eventName, EVENT_NAME));
       const updatedAt = new Date().toISOString();
+      // Advancing one item recalculates the surrounding timeline so there is a
+      // single live item and, at most, one next item after every update.
       await Promise.all(items.map((item) => db.update(runOfShowItems).set({
         status: item.position < selected[0].position
           ? "done"
@@ -85,6 +92,7 @@ export async function POST(request: Request) {
         updatedAt,
       }).where(eq(runOfShowItems.id, item.id))));
       await db.insert(auditEvents).values({
+        // The audit event records intent separately from mutable schedule rows.
         eventName: EVENT_NAME,
         actorEmail: auth.user.email,
         action: "run-of-show.updated",
