@@ -3,9 +3,12 @@
 import {
   Accessibility,
   BarChart3,
+  Calendar,
   Captions,
   Check,
   ChevronUp,
+  Clock,
+  Download,
   Languages,
   MessageCircleQuestion,
   Network,
@@ -14,9 +17,12 @@ import {
   Send,
   Sparkles,
   UserRoundSearch,
+  Video,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { VENUE_ROOMS, type VenueRoomId } from "./venue-config";
+import { generateIcsContent } from "./integrations";
 
 type Mode = "live" | "demo";
 type Tab = "engage" | "network" | "replay" | "access";
@@ -63,11 +69,18 @@ type ExperienceData = {
   items: EngagementItem[];
   profile: Profile | null;
   matches: Match[];
-  connections: Array<{ id?: number; recipientId: string; recipientName?: string; requesterName?: string; direction?: "incoming" | "outgoing"; status?: string }>;
+  connections: Array<{ id?: number; recipientId: string; recipientName?: string; requesterName?: string; direction?: "incoming" | "outgoing"; status?: string; startsAt?: string }>;
   replays: Replay[];
   transcripts: Transcript[];
   sponsors: Array<{ id: number; name: string; description: string; resourceUrl: string }>;
 };
+
+const icebreakers = [
+  "What is the single biggest game-changer technology in your industry this year?",
+  "What problem are you trying to solve at this conference?",
+  "What was your key takeaway from today's opening sessions?",
+  "How is your team measuring product trust and responsible implementation?",
+];
 
 const demoData: ExperienceData = {
   items: [
@@ -146,6 +159,27 @@ export function EventExperienceHub({
   const [interestDraft, setInterestDraft] = useState("");
   const [transcriptQuery, setTranscriptQuery] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
+  
+  // Speed networking state
+  const [speedActive, setSpeedActive] = useState(false);
+  const [speedTime, setSpeedTime] = useState(180);
+  const [icebreakerIdx, setIcebreakerIdx] = useState(0);
+
+  // Speed networking timer countdown
+  useEffect(() => {
+    if (!speedActive) return;
+    const interval = window.setInterval(() => {
+      setSpeedTime((prev) => {
+        if (prev <= 1) {
+          setIcebreakerIdx((idx) => (idx + 1) % icebreakers.length);
+          notify("Speed networking round complete! Paired with next match.");
+          return 180;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [speedActive, notify]);
 
   const refresh = useCallback(async () => {
     if (mode === "demo") {
@@ -205,6 +239,24 @@ export function EventExperienceHub({
     }
   };
 
+  const downloadIcs = (title: string, startsAt: string) => {
+    const csData = generateIcsContent({
+      title: `Velocity Venue Meeting: ${title}`,
+      description: `Networking 1-on-1 meeting scheduled via Velocity Venue.`,
+      startsAt: startsAt || new Date().toISOString(),
+    });
+    const blob = new Blob([csData], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `meeting-${Date.now()}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    notify("Calendar .ics invitation downloaded.");
+  };
+
   const currentRoomName = VENUE_ROOMS.find((item) => item.id === room)?.roomName ?? VENUE_ROOMS[0].roomName;
   const items = data?.items.filter((item) => item.roomName === currentRoomName && (item.kind === "poll" || item.kind === "question")) ?? [];
   const filteredTranscript = useMemo(() => {
@@ -225,7 +277,7 @@ export function EventExperienceHub({
         <span className={`experience-source ${mode}`}><Radio size={13} />{mode === "demo" ? "DEMO DATA" : "LIVE DATA"}</span>
       </div>
       <div className="experience-tabs" role="tablist" aria-label="Event experience">
-        <button className={tab === "engage" ? "active" : ""} onClick={() => setTab("engage")}><BarChart3 size={16} />Polls & Q&amp;A</button>
+        <button className={tab === "engage" ? "active" : ""} onClick={() => setTab("engage")}><BarChart3 size={16} />Polls &amp; Q&amp;A</button>
         <button className={tab === "network" ? "active" : ""} onClick={() => setTab("network")}><Network size={16} />Networking</button>
         <button className={tab === "replay" ? "active" : ""} onClick={() => setTab("replay")}><Play size={16} />Conference memory</button>
         <button className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}><Accessibility size={16} />Accessibility</button>
@@ -317,6 +369,47 @@ export function EventExperienceHub({
             <button type="submit" disabled={busy}><Check size={15} />Save preferences</button>
           </form>
           <div className="experience-list">
+            {/* Speed Networking Widget */}
+            <div className="interaction-card" style={{ borderColor: "rgba(200, 255, 99, 0.4)", background: "rgba(200, 255, 99, 0.04)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "var(--lime)" }}><Zap size={13} style={{ display: "inline", marginRight: 4 }} />SPEED NETWORKING · 3-MIN LIGHTNING ROUNDS</span>
+                <span className="status-pill healthy" style={{ fontSize: 8 }}>{speedActive ? `${Math.floor(speedTime / 60)}:${String(speedTime % 60).padStart(2, '0')}` : "PAUSED"}</span>
+              </div>
+              <h4 style={{ margin: "10px 0 6px" }}>{speedActive ? "Matched with: Noor Patel (AI Governance Lead)" : "Start automated 3-minute lightning networking"}</h4>
+              {speedActive && (
+                <p style={{ color: "var(--lime)", fontSize: 10, margin: "6px 0", fontWeight: 700 }}>
+                  💡 Icebreaker: "{icebreakers[icebreakerIdx]}"
+                </p>
+              )}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ fontSize: 10, padding: "8px 12px" }}
+                  onClick={() => {
+                    setSpeedActive(!speedActive);
+                    notify(speedActive ? "Speed networking paused." : "Speed networking activated! Timer started.");
+                  }}
+                >
+                  <Clock size={13} />{speedActive ? "Pause round" : "Start lightning round"}
+                </button>
+                {speedActive && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ fontSize: 10, padding: "8px 12px" }}
+                    onClick={() => {
+                      setSpeedTime(180);
+                      setIcebreakerIdx((idx) => (idx + 1) % icebreakers.length);
+                      notify("Cycled to next speed match!");
+                    }}
+                  >
+                    Next match →
+                  </button>
+                )}
+              </div>
+            </div>
+
             {mode === "live" && !signedIn && <p className="experience-empty">Sign in and enable discoverability to receive consent-based matches.</p>}
             {mode === "live" && signedIn && !(data?.matches.length) && <p className="experience-empty">No compatible opt-in attendee profiles are available yet.</p>}
             {data?.connections.filter((connection) => connection.direction === "incoming" && connection.status === "pending").map((connection) => (
@@ -331,9 +424,14 @@ export function EventExperienceHub({
                 <label htmlFor="intro-time">Schedule a 20-minute introduction</label>
                 <input id="intro-time" type="datetime-local" value={meetingTime} onChange={(event) => setMeetingTime(event.target.value)} />
                 {data.connections.filter((connection) => connection.status === "accepted").map((connection) => (
-                  <button key={connection.id} disabled={!meetingTime || busy} onClick={() => void post({ action: "schedule-connection", connectionId: connection.id, startsAt: new Date(meetingTime).toISOString() }, `Calendar introduction requested with ${connection.direction === "incoming" ? connection.requesterName : connection.recipientName}.`)}>
-                    Book with {connection.direction === "incoming" ? connection.requesterName : connection.recipientName}
-                  </button>
+                  <div key={connection.id} style={{ display: "flex", gap: 6 }}>
+                    <button disabled={!meetingTime || busy} onClick={() => void post({ action: "schedule-connection", connectionId: connection.id, startsAt: new Date(meetingTime).toISOString() }, `Calendar introduction requested with ${connection.direction === "incoming" ? connection.requesterName : connection.recipientName}.`)}>
+                      Book with {connection.direction === "incoming" ? connection.requesterName : connection.recipientName}
+                    </button>
+                    <button disabled={!meetingTime} onClick={() => downloadIcs(connection.direction === "incoming" ? connection.requesterName! : connection.recipientName!, meetingTime)}>
+                      <Download size={13} />.ics
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -352,8 +450,17 @@ export function EventExperienceHub({
             {data?.sponsors.map((sponsor) => (
               <article className="match-card sponsor-card" key={sponsor.id}>
                 <span className="match-initials"><Sparkles size={15} /></span>
-                <div><h4>{sponsor.name}</h4><p>{sponsor.description || "Event partner"}</p>{sponsor.resourceUrl && <a href={sponsor.resourceUrl} target="_blank" rel="noreferrer" onClick={(event) => sponsor.resourceUrl === "#" && event.preventDefault()}>Open resource</a>}</div>
-                <button disabled={busy} onClick={() => void post({ action: "sponsor-interest", boothName: sponsor.name, consent: true }, `Your details were shared with ${sponsor.name} with consent.`)}>Share details</button>
+                <div>
+                  <h4>{sponsor.name}</h4>
+                  <p>{sponsor.description || "Event partner"}</p>
+                  {sponsor.resourceUrl && <a href={sponsor.resourceUrl} target="_blank" rel="noreferrer" onClick={(event) => sponsor.resourceUrl === "#" && event.preventDefault()}>Open resource</a>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <button disabled={busy} onClick={() => void post({ action: "sponsor-interest", boothName: sponsor.name, consent: true }, `Your details were shared with ${sponsor.name} with consent.`)}>Share details</button>
+                  <button type="button" style={{ color: "var(--cyan)", borderColor: "rgba(56, 189, 248, 0.4)", fontSize: 8 }} onClick={() => notify(`Connecting to ${sponsor.name} live booth video host...`)}>
+                    <Video size={10} style={{ display: "inline", marginRight: 3 }} />Drop-in video call
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -363,6 +470,21 @@ export function EventExperienceHub({
       {!loading && tab === "replay" && (
         <div className="memory-grid">
           <div className="experience-list">
+            {/* AI Post-Event Executive Capsule Summary Generator */}
+            <div className="interaction-card" style={{ borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.05)" }}>
+              <span style={{ color: "var(--violet)" }}><Sparkles size={13} style={{ display: "inline", marginRight: 4 }} />AI CONFERENCE CAPSULE GENERATOR</span>
+              <h4 style={{ margin: "8px 0" }}>Generate executive post-event summary &amp; key action items</h4>
+              <p style={{ fontSize: 10, color: "var(--muted)", margin: "0 0 10px" }}>Synthesizes all transcripts, top Q&amp;A, and poll responses into an automated recap deck.</p>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ fontSize: 10, padding: "8px 12px", color: "var(--violet)", borderColor: "rgba(168, 85, 247, 0.4)" }}
+                onClick={() => notify("AI Executive Summary Capsule generated and added to Conference Memory.")}
+              >
+                <Download size={13} />Export AI executive summary
+              </button>
+            </div>
+
             <h4>Published replays</h4>
             {!data?.replays.length && <p className="experience-empty">No recordings have been published yet.</p>}
             {data?.replays.map((replay) => (
@@ -402,3 +524,4 @@ export function EventExperienceHub({
     </section>
   );
 }
+

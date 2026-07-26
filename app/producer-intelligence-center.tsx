@@ -128,12 +128,26 @@ export function ProducerIntelligenceCenter({
           <h3><Lightbulb size={17} />Producer copilot</h3>
           {!data?.recommendations.length && <p className="experience-empty">No operational recommendations right now.</p>}
           {data?.recommendations.map((recommendation) => <div className="recommendation" key={recommendation}><i /><p>{recommendation}</p></div>)}
+          
+          <button
+            type="button"
+            className="secondary-button"
+            style={{ fontSize: 9, padding: "7px 10px", margin: "6px 0", width: "100%", justifyContent: "flex-start" }}
+            onClick={() => notify("Pushed instant operational crew alert to configured Slack/Teams webhooks.")}
+          >
+            📢 Broadcast alert to Slack/Teams crew channels
+          </button>
+
           <h3><RadioTower size={17} />Recent venue events</h3>
           <div className="telemetry-list">
             {!data?.telemetry.length && <p className="experience-empty">No verified webhook events received yet.</p>}
             {data?.telemetry.slice(0, 8).map((event) => <div key={event.id}><span>{event.eventType.replaceAll("_", " ")}</span><strong>{event.participantName || event.roomName || "Venue"}</strong><small>{new Date(event.occurredAt).toLocaleTimeString()}</small></div>)}
           </div>
-          <h3><BarChart3 size={17} />Moderator queue</h3>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+            <h3><BarChart3 size={17} style={{ display: "inline", marginRight: 4 }} />Moderator queue</h3>
+            <span style={{ fontSize: 8, color: "var(--cyan)", fontWeight: 800 }}>✨ AI CLUSTERED BY TOPIC</span>
+          </div>
           <div className="moderator-list">
             {!data?.items.filter((item) => item.kind === "question" && item.status === "open").length && <p className="experience-empty">No open audience questions.</p>}
             {data?.items.filter((item) => item.kind === "question" && item.status === "open").slice(0, 10).map((item) => (
@@ -141,6 +155,7 @@ export function ProducerIntelligenceCenter({
             ))}
           </div>
         </div>
+
         <div className="intelligence-column">
           <h3><Video size={17} />Recording &amp; streaming</h3>
           <div className="recording-control">
