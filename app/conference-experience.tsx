@@ -65,6 +65,7 @@ import { AgoraRoom } from "./agora-room";
 type Role = "attendee" | "producer";
 type Theme = "dark" | "light";
 type AppMode = "live" | "demo";
+type AttendeeExperienceTab = "engage" | "network" | "replay" | "access";
 type RoomId = VenueRoomId;
 type LiveConnection = {
   token: string;
@@ -974,6 +975,8 @@ function AttendeeView({
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportIssue, setSupportIssue] = useState("");
   const [supportBusy, setSupportBusy] = useState(false);
+  const [activeNavigation, setActiveNavigation] = useState<"venue" | "agenda" | "chat" | "expo">("venue");
+  const [experienceNavigation, setExperienceNavigation] = useState<{ tab: AttendeeExperienceTab; requestId: number } | null>(null);
 
   const liveItem = venueSnapshot?.runOfShow.find((item) => item.status === "live");
   const nextItem = venueSnapshot?.runOfShow.find((item) => item.status === "next")
@@ -1022,14 +1025,41 @@ function AttendeeView({
     setChatDraft("");
   };
 
+  const navigateTo = (destination: "venue" | "agenda" | "chat" | "expo") => {
+    setActiveNavigation(destination);
+    if (destination === "venue") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (destination === "agenda") {
+      document.getElementById("attendee-agenda")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (destination === "chat") {
+      if (mode === "demo") setChatOpen(true);
+      else {
+        notify(liveConnected ? "Opening the connected room chat." : "Join the room to use Live chat.");
+        openLiveRoom(room);
+      }
+      return;
+    }
+
+    enterRoom("expo");
+    setExperienceNavigation({ tab: "network", requestId: Date.now() });
+  };
+
+  const attendeeAgenda = mode === "demo"
+    ? demoRunOfShow.map((item) => ({ scheduledTime: item.time, title: item.title, owner: item.owner, status: item.status }))
+    : venueSnapshot?.runOfShow ?? [];
+
   return (
     <div className="attendee-layout">
       <aside className="side-nav">
         <div>
-          <button className="nav-item active" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><Map size={20} /><span>Venue</span></button>
-          <button className="nav-item" onClick={() => document.getElementById("rooms")?.scrollIntoView({ behavior: "smooth" })}><CalendarDays size={20} /><span>Agenda</span></button>
-          <button className="nav-item" onClick={() => mode === "demo" ? setChatOpen(true) : openLiveRoom(room)}><MessageSquareText size={20} /><span>Chat</span></button>
-          <button className="nav-item" onClick={() => enterRoom("expo")}><Store size={20} /><span>Expo</span></button>
+          <button className={`nav-item ${activeNavigation === "venue" ? "active" : ""}`} aria-current={activeNavigation === "venue" ? "page" : undefined} onClick={() => navigateTo("venue")}><Map size={20} /><span>Venue</span></button>
+          <button className={`nav-item ${activeNavigation === "agenda" ? "active" : ""}`} aria-current={activeNavigation === "agenda" ? "location" : undefined} onClick={() => navigateTo("agenda")}><CalendarDays size={20} /><span>Agenda</span></button>
+          <button className={`nav-item ${activeNavigation === "chat" ? "active" : ""}`} aria-current={activeNavigation === "chat" ? "location" : undefined} title={mode === "demo" ? "Open demo chat" : liveConnected ? "Open room chat" : "Join the room to use chat"} onClick={() => navigateTo("chat")}><MessageSquareText size={20} /><span>{mode === "live" && !liveConnected ? "Join chat" : "Chat"}</span></button>
+          <button className={`nav-item ${activeNavigation === "expo" ? "active" : ""}`} aria-current={activeNavigation === "expo" ? "location" : undefined} onClick={() => navigateTo("expo")}><Store size={20} /><span>Expo</span></button>
         </div>
         <div>
           <button className="nav-item" onClick={() => mode === "demo" ? window.location.assign("/docs") : setSupportOpen(true)}><CircleHelp size={20} /><span>Help</span></button>
@@ -1066,9 +1096,27 @@ function AttendeeView({
           </div>
         </section>
 
+        <section className="attendee-agenda scroll-target" id="attendee-agenda" aria-labelledby="attendee-agenda-title">
+          <div className="section-heading">
+            <div><span className="eyebrow">EVENT SCHEDULE</span><h3 id="attendee-agenda-title">Agenda</h3></div>
+            <span className={`experience-source ${mode}`}><CalendarDays size={13} />{mode === "demo" ? "DEMO SCHEDULE" : "LIVE SCHEDULE"}</span>
+          </div>
+          {attendeeAgenda.length ? (
+            <ol className="attendee-agenda-list">
+              {attendeeAgenda.map((item, index) => (
+                <li className={item.status} key={`${item.scheduledTime}-${item.title}-${index}`}>
+                  <time>{item.scheduledTime}</time>
+                  <div><strong>{item.title}</strong><small>{item.owner}</small></div>
+                  <span>{item.status === "done" ? "Complete" : item.status}</span>
+                </li>
+              ))}
+            </ol>
+          ) : <p className="experience-empty">The producer has not published an agenda yet.</p>}
+        </section>
+
         <div className="section-heading">
           <div><span className="eyebrow">EXPLORE THE VENUE</span><h3>Where do you want to go?</h3></div>
-          <button className="text-button" onClick={() => document.getElementById("rooms")?.scrollIntoView({ behavior: "smooth" })}>View full agenda <ChevronRight size={16} /></button>
+          <button className="text-button" onClick={() => navigateTo("agenda")}>View full agenda <ChevronRight size={16} /></button>
         </div>
 
         <div className="conference-capability-strip" aria-label="Conference capabilities">
@@ -1103,6 +1151,7 @@ function AttendeeView({
           room={room}
           signedIn={Boolean(appUser)}
           requestSignIn={requestSignIn}
+          navigationTarget={experienceNavigation}
           notify={notify}
         />
       </section>
@@ -1116,7 +1165,7 @@ function AttendeeView({
           <div className="media-controls">
             <button className={!micOn ? "off" : ""} onClick={() => setMicOn(!micOn)} aria-label={micOn ? "Mute microphone" : "Unmute microphone"}>{micOn ? <Mic size={18} /> : <MicOff size={18} />}</button>
             <button className={!cameraOn ? "off" : ""} onClick={() => setCameraOn(!cameraOn)} aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}>{cameraOn ? <Camera size={18} /> : <CameraOff size={18} />}</button>
-            <button onClick={() => setChatOpen(!chatOpen)} aria-label="Toggle chat"><MessageSquareText size={18} /></button>
+            <button onClick={() => navigateTo("chat")} aria-label={mode === "demo" ? "Open demo chat" : "Join room chat"}><MessageSquareText size={18} /></button>
           </div>
           {(mode === "live" || room !== "expo") && <button className="join-live-button" onClick={() => openLiveRoom(room)}><Video size={15} />{liveConnected ? "Reopen live room" : "Open video lobby"}</button>}
           <div className="connection-status"><i /> {mode === "demo" ? "Demo controls only" : liveConnected ? "Live media room connected" : venueSnapshot?.mediaAvailable ? "Secure media preflight ready" : venueSnapshot?.mediaError ?? "Checking media…"}</div>
@@ -1159,7 +1208,7 @@ function AttendeeView({
 
       {chatOpen && mode === "demo" && (
         <div className="chat-panel">
-          <div className="chat-head"><div><strong>Demo conversation</strong><small>Sample messages</small></div><button onClick={() => setChatOpen(false)} aria-label="Close chat"><X size={18} /></button></div>
+          <div className="chat-head"><div><strong>Demo conversation</strong><small>Sample messages</small></div><button onClick={() => { setChatOpen(false); setActiveNavigation("venue"); }} aria-label="Close chat"><X size={18} /></button></div>
           <div className="chat-messages">
             <p><strong>Priya</strong> The governance point is so important.</p>
             <p><strong>Daniel</strong> Would love the framework Sofia mentioned.</p>

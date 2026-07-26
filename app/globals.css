@@ -849,6 +849,48 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
+.attendee-agenda {
+  margin: 30px 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--ink-2);
+  box-shadow: var(--shadow-sm);
+}
+.attendee-agenda .section-heading { margin: 0 0 16px; }
+.attendee-agenda-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+.attendee-agenda-list li {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+.attendee-agenda-list time { color: var(--cyan); font-size: 11px; font-weight: 900; }
+.attendee-agenda-list div { display: grid; gap: 3px; }
+.attendee-agenda-list strong { font-size: 12px; }
+.attendee-agenda-list small { color: var(--muted); font-size: 10px; }
+.attendee-agenda-list li > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.attendee-agenda-list li.live { border-color: rgba(255, 108, 85, 0.45); background: rgba(255, 108, 85, 0.06); }
+.attendee-agenda-list li.live > span { color: var(--coral); }
+.attendee-agenda-list li.next > span { color: var(--lime); }
+.attendee-agenda-list li.done { opacity: 0.7; }
 .room-card {
   text-align: left;
   min-height: 215px;
@@ -2167,6 +2209,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .nav-item { height: 52px; width: 58px; margin: 0; }
   .venue-content, .command-content { padding: 24px 16px 84px; }
   .room-grid, .right-rail { grid-template-columns: 1fr; }
+  .attendee-agenda { padding: 16px; }
   .producer-nav { overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
   .producer-nav::-webkit-scrollbar { display: none; }
   .producer-nav-item { flex: 0 0 52px; width: 52px; height: 52px; margin: 0; }
@@ -2189,6 +2232,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .mode-switch button, .role-switch button { padding-inline: 7px; }
   .icon-button, .profile-button { flex: 0 0 34px; width: 34px; height: 34px; }
   .experience-tabs { grid-template-columns: 1fr; }
+  .attendee-agenda-list li { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; }
+  .attendee-agenda-list li > span { grid-column: 2; }
   .live-room-identity .brand, .live-header-divider { display: none; }
   .live-room-header { min-height: 62px; }
   .demo-room-banner { font-size: 8px; letter-spacing: 0.06em; }

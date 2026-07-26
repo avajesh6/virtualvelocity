@@ -137,6 +137,7 @@ export function EventExperienceHub({
   room,
   signedIn,
   requestSignIn,
+  navigationTarget,
   notify,
 }: {
   mode: Mode;
@@ -144,6 +145,7 @@ export function EventExperienceHub({
   room: VenueRoomId;
   signedIn: boolean;
   requestSignIn: () => void;
+  navigationTarget?: { tab: Tab; requestId: number } | null;
   notify: (message: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("engage");
@@ -214,6 +216,20 @@ export function EventExperienceHub({
   useEffect(() => {
     queueMicrotask(() => void refresh());
   }, [refresh]);
+
+  useEffect(() => {
+    if (!navigationTarget) return;
+    queueMicrotask(() => setTab(navigationTarget.tab));
+    // Wait for the requested panel to render before moving focus and viewport
+    // to its meaningful content, especially on the single-column mobile view.
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const target = navigationTarget.tab === "network"
+        ? document.getElementById("partner-discovery")
+        : document.getElementById(`experience-panel-${navigationTarget.tab}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    }));
+  }, [navigationTarget]);
 
   const post = async (body: Record<string, unknown>, success: string) => {
     if (mode === "demo") {
@@ -525,7 +541,7 @@ export function EventExperienceHub({
                 </article>
               );
             })}
-            <h4>Partner discovery</h4>
+            <h4 id="partner-discovery" className="scroll-target" tabIndex={-1}>Partner discovery</h4>
             {!data?.sponsors.length && <p className="experience-empty">No sponsor booths have been published.</p>}
             {data?.sponsors.map((sponsor) => (
               <article className="match-card sponsor-card" key={sponsor.id}>

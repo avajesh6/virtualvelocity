@@ -140,15 +140,22 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(experience, /Demo interest captured locally/);
   assert.match(experience, /producerUser \?\? demoProducer/);
   assert.match(experience, /setLiveConnection\(null\)/);
+  assert.match(experience, /id="attendee-agenda"/);
+  assert.match(experience, /navigateTo\("agenda"\)/);
+  assert.match(experience, /Join the room to use Live chat/);
+  assert.match(experience, /navigationTarget=\{experienceNavigation\}/);
   assert.match(hub, /Demo mutations intentionally stop here/);
   assert.match(hub, /action === "answer-poll"/);
   assert.match(hub, /action === "request-connection"/);
   assert.match(hub, /role="tab" aria-selected/);
+  assert.match(hub, /id="partner-discovery"/);
+  assert.match(hub, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
   assert.match(intelligence, /demo_recording_started/);
   assert.match(intelligence, /demo_memory_generated/);
   assert.match(styles, /@media \(max-width: 520px\)/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.match(styles, /\.room-grid, \.right-rail \{ grid-template-columns: 1fr; \}/);
+  assert.match(styles, /\.attendee-agenda-list/);
 });
 
 test("escapes portable calendar text and rejects invalid dates", async () => {
