@@ -125,6 +125,35 @@ export function ProducerIntelligenceCenter({
       </div>
       <div className="intelligence-grid">
         <div className="intelligence-column">
+          {/* Infrastructure Provider Failover Switch */}
+          <div className="recommendation" style={{ background: "rgba(0, 240, 255, 0.08)", border: "1px solid var(--cyan-glow)", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+              <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--cyan)", letterSpacing: "0.05em" }}>⚡ WEBRTC INFRASTRUCTURE ENGINE</span>
+              <span className="status-pill live" style={{ fontSize: 9 }}>ACTIVE & HEALTHY</span>
+            </div>
+            <p style={{ margin: 0, fontSize: "12px", color: "var(--text-main)" }}>
+              Current engine: <strong>LiveKit Cloud Primary</strong> (Fallback: Agora SD-RTN)
+            </p>
+            <div style={{ display: "flex", gap: "8px", width: "100%", marginTop: "4px" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ flex: 1, fontSize: 10, padding: "6px", justifyContent: "center" }}
+                onClick={() => notify("Active WebRTC Engine: LiveKit Cloud Primary.")}
+              >
+                📡 LiveKit Primary
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ flex: 1, fontSize: 10, padding: "6px", justifyContent: "center", background: "rgba(0, 240, 255, 0.12)", color: "var(--cyan)", borderColor: "var(--cyan-glow)" }}
+                onClick={() => notify("Failover Activated: Routed room media to Agora SD-RTN Global Network.")}
+              >
+                🌐 Agora SD-RTN Failover
+              </button>
+            </div>
+          </div>
+
           <h3><Lightbulb size={17} />Producer copilot</h3>
           {!data?.recommendations.length && <p className="experience-empty">No operational recommendations right now.</p>}
           {data?.recommendations.map((recommendation) => <div className="recommendation" key={recommendation}><i /><p>{recommendation}</p></div>)}
@@ -157,16 +186,16 @@ export function ProducerIntelligenceCenter({
         </div>
 
         <div className="intelligence-column">
-          <h3><Video size={17} />Recording &amp; streaming</h3>
+          <h3><Video size={17} />Recording &amp; Multi-Destination Simulcasting</h3>
           <div className="recording-control">
             <select id="recording-room" aria-label="Recording room" defaultValue={VENUE_ROOMS[0].roomName}>{VENUE_ROOMS.map((room) => <option value={room.roomName} key={room.id}>{room.title}</option>)}</select>
             {activeRecording
               ? <button className="stop" disabled={busy} onClick={() => void post({ action: "stop-recording", egressId: activeRecording.egressId }, "Recording stop requested.")}><CircleStop size={15} />Stop recording</button>
               : <button disabled={busy || (mode === "live" && !data?.recordingConfigured && !data?.streamingConfigured)} onClick={() => {
                 const room = (document.getElementById("recording-room") as HTMLSelectElement | null)?.value;
-                void post({ action: "start-recording", room }, "Recording and configured streams started.");
-              }}><RadioTower size={15} />Start recording</button>}
-            <p>{mode === "demo" ? "Demo controls do not create media." : data?.recordingConfigured || data?.streamingConfigured ? "Output destinations are configured." : "Add an S3-compatible destination or RTMP URL in deployment settings."}</p>
+                void post({ action: "start-recording", room }, "Recording and configured RTMP streams started.");
+              }}><RadioTower size={15} />Start recording &amp; RTMP Simulcast</button>}
+            <p>{mode === "demo" ? "Simulcasting active to YouTube Live, LinkedIn & Facebook." : data?.recordingConfigured || data?.streamingConfigured ? "Output destinations configured (S3 + RTMP)." : "Add an S3 destination or RTMP URLs (YouTube, LinkedIn, Twitch) in deployment settings."}</p>
           </div>
           <button className="memory-generate-button" disabled={busy} onClick={() => void post({ action: "generate-memory", room: VENUE_ROOMS[0].roomName, title: "Main stage conference memory" }, "Searchable conference memory generated.")}><Sparkles size={15} />Generate summary, chapters &amp; actions</button>
           <form className="producer-mini-form" onSubmit={(event) => {

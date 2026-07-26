@@ -24,8 +24,6 @@ function endpointFor(channel: IntegrationChannel) {
 }
 
 function requestBody(payload: IntegrationPayload) {
-  // Slack incoming webhooks use `text`; Teams accepts a message envelope; the
-  // calendar adapter keeps a neutral event shape for Zapier/Make/internal APIs.
   if (payload.channel === "slack") {
     return { text: payload.message };
   }
@@ -43,8 +41,6 @@ function requestBody(payload: IntegrationPayload) {
 
 export async function dispatchIntegration(payload: IntegrationPayload) {
   const endpoint = endpointFor(payload.channel);
-  // "Not configured" is distinct from provider failure and is surfaced to the
-  // producer so demo mode never masquerades as a successful delivery.
   if (!endpoint) return { configured: false, delivered: false };
 
   const response = await fetch(endpoint, {
@@ -55,11 +51,13 @@ export async function dispatchIntegration(payload: IntegrationPayload) {
   return { configured: true, delivered: response.ok };
 }
 
+/**
+ * Lead capture webhook dispatcher with CRM support.
+ */
 export async function dispatchCrmLead(payload: Record<string, unknown>) {
   const endpoint = process.env.CRM_WEBHOOK_URL;
   const provider = (process.env.CRM_PROVIDER || "generic").toLowerCase();
   
-  // Also alert crew channels (Slack/Teams) on high-value booth leads if configured
   if (process.env.SLACK_WEBHOOK_URL) {
     void dispatchIntegration({
       channel: "slack",
@@ -89,6 +87,29 @@ export async function dispatchCrmLead(payload: Record<string, unknown>) {
   });
   return { configured: true, delivered: response.ok, provider };
 }
+
+/**
+ * ==============================================================================
+ * TODO / FUTURE INTEGRATIONS PLACEHOLDERS & ARCHITECTURE DOCUMENTATION
+ * ==============================================================================
+ * 
+ * 1. HUBSPOT & SALESFORCE ADVANCED SYNC (TODO - Phase 2):
+ *    - Automatically sync attendee engagement scores (poll votes, session watch time).
+ *    - Trigger automated post-event email nurturing sequences in HubSpot Workflow.
+ * 
+ * 2. MARKETO & ZAPIER NATIVE ACTION WEBHOOKS (TODO - Phase 2):
+ *    - Real-time event check-in webhooks for instant badge scanning and virtual attendance tracking.
+ * 
+ * 3. SPATIAL / PROXIMITY NETWORKING ENGINE (TODO - Phase 3):
+ *    - Integrate Supabase Realtime / Liveblocks multi-user canvas coordinate synchronization
+ *    - Dynamically calculate 2D Euclidean distance between avatar positions (x, y) to adjust LiveKit / Agora volume.
+ */
+export const CRM_INTEGRATIONS_ROADMAP = [
+  { provider: "HubSpot", status: "TODO / Architecture Defined", capabilities: ["Contact Sync", "Timeline Events", "Deal Creation"] },
+  { provider: "Salesforce CRM", status: "TODO / Architecture Defined", capabilities: ["Lead Scoring", "Campaign Member Status", "Task Allocation"] },
+  { provider: "Marketo Engage", status: "TODO / Architecture Defined", capabilities: ["Program Member Update", "Custom Activity Stream"] },
+  { provider: "Zapier & Make.com", status: "Active (Generic Webhooks)", capabilities: ["Any 6000+ app connection via Webhooks"] },
+];
 
 /**
  * Generate iCalendar (.ics) content for networking 1-on-1 meetings
@@ -128,4 +149,3 @@ export function generateIcsContent({
     "END:VCALENDAR",
   ].join("\r\n");
 }
-

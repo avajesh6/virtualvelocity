@@ -28,6 +28,7 @@ import {
   Download,
   ExternalLink,
   Gauge,
+  Globe,
   HeartPulse,
   LayoutDashboard,
   LifeBuoy,
@@ -59,6 +60,7 @@ import { getSupabaseBrowserClient } from "./supabase-client";
 import { VENUE_ROOMS, type VenueRoomId } from "./venue-config";
 import { EventExperienceHub } from "./event-experience-hub";
 import { ProducerIntelligenceCenter } from "./producer-intelligence-center";
+import { AgoraRoom } from "./agora-room";
 
 type Role = "attendee" | "producer";
 type Theme = "dark" | "light";
@@ -275,6 +277,8 @@ export function ConferenceExperience() {
   const [liveJoining, setLiveJoining] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveConnection, setLiveConnection] = useState<LiveConnection | null>(null);
+  const [agoraConnection, setAgoraConnection] = useState<{ appId: string; channelName: string; token: string; uid: number | string } | null>(null);
+  const [activeEngine, setActiveEngine] = useState<"livekit" | "agora">("livekit");
   const [venueSnapshot, setVenueSnapshot] = useState<VenueSnapshot | null>(null);
   const [venueStatus, setVenueStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -630,8 +634,31 @@ export function ConferenceExperience() {
     try {
       const roomName = VENUE_ROOMS.find((item) => item.id === room)?.roomName;
       if (!roomName) throw new Error("This room is not configured.");
-      // Request a room-scoped token immediately before joining; tokens are not
-      // stored in localStorage or reused across venue spaces.
+
+      if (activeEngine === "agora") {
+        const response = await fetch("/api/agora-token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ channelName: roomName, uid: Math.floor(Math.random() * 10000) }),
+        });
+        const payload = (await response.json()) as { token?: string; appId?: string; channelName?: string; uid?: number; error?: string };
+        if (!response.ok || !payload.token) {
+          throw new Error(payload.error || "Agora engine room token generation failed.");
+        }
+        setMicOn(choices.audioEnabled);
+        setCameraOn(choices.videoEnabled);
+        setAgoraConnection({
+          appId: payload.appId || "demo-agora-app-id",
+          channelName: payload.channelName || roomName,
+          token: payload.token,
+          uid: payload.uid || 0,
+        });
+        setLiveDialogOpen(false);
+        setNotice("Connected to Agora SD-RTN Channel.");
+        return;
+      }
+
+      // Request a LiveKit room-scoped token
       const response = await fetch("/api/livekit-token", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -650,7 +677,7 @@ export function ConferenceExperience() {
         choices: { ...choices, username: choices.username.trim() },
       });
       setLiveDialogOpen(false);
-      setNotice("Connected securely to the live room.");
+      setNotice("Connected securely to the LiveKit room.");
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : "The live room is temporarily unavailable.");
     } finally {
@@ -788,6 +815,18 @@ export function ConferenceExperience() {
           error={liveError}
           close={() => setLiveDialogOpen(false)}
           connect={connectLiveRoom}
+        />
+      )}
+
+      {agoraConnection && (
+        <AgoraRoom
+          appId={agoraConnection.appId}
+          channelName={agoraConnection.channelName}
+          token={agoraConnection.token}
+          uid={agoraConnection.uid}
+          roomTitle={activeRoom.title}
+          onLeave={() => setAgoraConnection(null)}
+          notify={setNotice}
         />
       )}
 
@@ -1244,18 +1283,77 @@ function ConnectedLiveRoom({
 }
 
 function LiveCaptions() {
-  // LiveKit transcription streams are emitted by the room's transcription
-  // agent. The venue displays only provider-delivered text and never invents
-  // captions when the stream is absent.
   const transcriptions = useTranscriptions();
   const visible = transcriptions.slice(-3);
+  const [targetLang, setTargetLang] = useState<"en" | "es" | "fr" | "de" | "ja">("en");
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (targetLang === "en" || !visible.length) {
+      setTranslatedText(null);
+      return;
+    }
+
+    const latestText = visible[visible.length - 1]?.text;
+    if (!latestText) return;
+
+    let cancelled = false;
+    async function translate() {
+      try {
+        const res = await fetch("/api/translation", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: latestText, targetLanguage: targetLang }),
+        });
+        const data = (await res.json()) as { translated?: string };
+        if (!cancelled && data.translated) {
+          setTranslatedText(data.translated);
+        }
+      } catch (err) {
+        console.warn("Translation failed:", err);
+      }
+    }
+    void translate();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, targetLang]);
+
   return (
     <div className={`live-captions ${visible.length ? "active" : ""}`} aria-live="polite" aria-label="Live captions">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "6px" }}>
+        <span style={{ fontSize: "11px", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px", color: "var(--cyan)" }}>
+          <Globe size={13} /> AI REAL-TIME TRANSLATION (DEEPGRAM + OPENAI)
+        </span>
+        <select
+          value={targetLang}
+          onChange={(e) => setTargetLang(e.target.value as "en" | "es" | "fr" | "de" | "ja")}
+          style={{
+            background: "rgba(0,0,0,0.5)",
+            border: "1px solid var(--glass-border)",
+            color: "#fff",
+            fontSize: "11px",
+            borderRadius: "6px",
+            padding: "2px 8px",
+            cursor: "pointer"
+          }}
+        >
+          <option value="en">English (Original)</option>
+          <option value="es">Spanish (Español)</option>
+          <option value="fr">French (Français)</option>
+          <option value="de">German (Deutsch)</option>
+          <option value="ja">Japanese (日本語)</option>
+        </select>
+      </div>
+
       {visible.length
         ? visible.map((segment, index) => (
-          <p key={`${segment.streamInfo.id}-${index}`}><strong>{segment.participantInfo.identity}</strong>{segment.text}</p>
+          <p key={`${segment.streamInfo.id}-${index}`}>
+            <strong>{segment.participantInfo.identity}</strong>
+            {targetLang !== "en" && translatedText ? translatedText : segment.text}
+          </p>
         ))
-        : <p><Captions size={15} /> Captions are ready and will appear when the room transcription service publishes text.</p>}
+        : <p><Captions size={15} /> Captions ready. Select target language above for real-time translation.</p>}
     </div>
   );
 }
