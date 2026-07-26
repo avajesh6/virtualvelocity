@@ -3,7 +3,6 @@
 import {
   Accessibility,
   BarChart3,
-  Calendar,
   Captions,
   Check,
   ChevronUp,
@@ -17,7 +16,6 @@ import {
   Send,
   Sparkles,
   UserRoundSearch,
-  Video,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -257,6 +255,29 @@ export function EventExperienceHub({
     notify("Calendar .ics invitation downloaded.");
   };
 
+  const downloadConferenceCapsule = () => {
+    const replayLines = (data?.replays ?? []).map((replay) => `- ${replay.title}: ${replay.summary || "No summary published."}`);
+    const transcriptLines = (data?.transcripts ?? []).slice(0, 20).map((segment) => `- ${segment.speakerName || "Speaker"}: ${segment.text}`);
+    const content = [
+      "# Velocity Venue conference capsule",
+      "",
+      "## Published session summaries",
+      ...(replayLines.length ? replayLines : ["- No session summaries have been published."]),
+      "",
+      "## Transcript highlights",
+      ...(transcriptLines.length ? transcriptLines : ["- No finalized transcript segments are available."]),
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([content], { type: "text/markdown;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "velocity-venue-conference-capsule.md";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    notify("Conference capsule downloaded from published event data.");
+  };
+
   const currentRoomName = VENUE_ROOMS.find((item) => item.id === room)?.roomName ?? VENUE_ROOMS[0].roomName;
   const items = data?.items.filter((item) => item.roomName === currentRoomName && (item.kind === "poll" || item.kind === "question")) ?? [];
   const filteredTranscript = useMemo(() => {
@@ -265,6 +286,7 @@ export function EventExperienceHub({
       !query || `${segment.speakerName} ${segment.text}`.toLowerCase().includes(query),
     );
   }, [data?.transcripts, transcriptQuery]);
+  const speedMatch = data?.matches.length ? data.matches[icebreakerIdx % data.matches.length] : null;
 
   return (
     <section className="experience-hub" id="experience" aria-labelledby="experience-title">
@@ -375,20 +397,21 @@ export function EventExperienceHub({
                 <span style={{ color: "var(--lime)" }}><Zap size={13} style={{ display: "inline", marginRight: 4 }} />SPEED NETWORKING · 3-MIN LIGHTNING ROUNDS</span>
                 <span className="status-pill healthy" style={{ fontSize: 8 }}>{speedActive ? `${Math.floor(speedTime / 60)}:${String(speedTime % 60).padStart(2, '0')}` : "PAUSED"}</span>
               </div>
-              <h4 style={{ margin: "10px 0 6px" }}>{speedActive ? "Matched with: Noor Patel (AI Governance Lead)" : "Start automated 3-minute lightning networking"}</h4>
+              <h4 style={{ margin: "10px 0 6px" }}>{speedActive && speedMatch ? `Conversation round with ${speedMatch.displayName}` : "Start a timed round with an opt-in match"}</h4>
               {speedActive && (
                 <p style={{ color: "var(--lime)", fontSize: 10, margin: "6px 0", fontWeight: 700 }}>
-                  💡 Icebreaker: "{icebreakers[icebreakerIdx]}"
+                  💡 Icebreaker: &ldquo;{icebreakers[icebreakerIdx]}&rdquo;
                 </p>
               )}
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button
                   type="button"
                   className="primary-button"
+                  disabled={!speedMatch}
                   style={{ fontSize: 10, padding: "8px 12px" }}
                   onClick={() => {
                     setSpeedActive(!speedActive);
-                    notify(speedActive ? "Speed networking paused." : "Speed networking activated! Timer started.");
+                    notify(speedActive ? "Networking timer paused." : `Three-minute conversation timer started with ${speedMatch?.displayName}.`);
                   }}
                 >
                   <Clock size={13} />{speedActive ? "Pause round" : "Start lightning round"}
@@ -401,7 +424,7 @@ export function EventExperienceHub({
                     onClick={() => {
                       setSpeedTime(180);
                       setIcebreakerIdx((idx) => (idx + 1) % icebreakers.length);
-                      notify("Cycled to next speed match!");
+                      notify("Moved to the next available opt-in match.");
                     }}
                   >
                     Next match →
@@ -457,9 +480,6 @@ export function EventExperienceHub({
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <button disabled={busy} onClick={() => void post({ action: "sponsor-interest", boothName: sponsor.name, consent: true }, `Your details were shared with ${sponsor.name} with consent.`)}>Share details</button>
-                  <button type="button" style={{ color: "var(--cyan)", borderColor: "rgba(56, 189, 248, 0.4)", fontSize: 8 }} onClick={() => notify(`Connecting to ${sponsor.name} live booth video host...`)}>
-                    <Video size={10} style={{ display: "inline", marginRight: 3 }} />Drop-in video call
-                  </button>
                 </div>
               </article>
             ))}
@@ -470,18 +490,17 @@ export function EventExperienceHub({
       {!loading && tab === "replay" && (
         <div className="memory-grid">
           <div className="experience-list">
-            {/* AI Post-Event Executive Capsule Summary Generator */}
             <div className="interaction-card" style={{ borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.05)" }}>
-              <span style={{ color: "var(--violet)" }}><Sparkles size={13} style={{ display: "inline", marginRight: 4 }} />AI CONFERENCE CAPSULE GENERATOR</span>
-              <h4 style={{ margin: "8px 0" }}>Generate executive post-event summary &amp; key action items</h4>
-              <p style={{ fontSize: 10, color: "var(--muted)", margin: "0 0 10px" }}>Synthesizes all transcripts, top Q&amp;A, and poll responses into an automated recap deck.</p>
+              <span style={{ color: "var(--violet)" }}><Sparkles size={13} style={{ display: "inline", marginRight: 4 }} />CONFERENCE CAPSULE EXPORT</span>
+              <h4 style={{ margin: "8px 0" }}>Export published summaries and transcript highlights</h4>
+              <p style={{ fontSize: 10, color: "var(--muted)", margin: "0 0 10px" }}>Builds a Markdown briefing from the event data currently available to you.</p>
               <button
                 type="button"
                 className="secondary-button"
                 style={{ fontSize: 10, padding: "8px 12px", color: "var(--violet)", borderColor: "rgba(168, 85, 247, 0.4)" }}
-                onClick={() => notify("AI Executive Summary Capsule generated and added to Conference Memory.")}
+                onClick={downloadConferenceCapsule}
               >
-                <Download size={13} />Export AI executive summary
+                <Download size={13} />Download conference capsule
               </button>
             </div>
 
@@ -524,4 +543,3 @@ export function EventExperienceHub({
     </section>
   );
 }
-

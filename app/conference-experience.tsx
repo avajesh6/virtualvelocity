@@ -72,6 +72,13 @@ type LiveConnection = {
   roomName: string;
   choices: LocalUserChoices;
 };
+type AgoraConnection = {
+  token: string;
+  appId: string;
+  channelName: string;
+  uid: number;
+  choices: LocalUserChoices;
+};
 type ProducerUser = { displayName: string; email: string; role: Role };
 type ManagedParticipant = { identity: string; name: string; audioTrackSid: string | null; audioMuted: boolean };
 type RunOfShowItem = {
@@ -277,7 +284,7 @@ export function ConferenceExperience() {
   const [liveJoining, setLiveJoining] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveConnection, setLiveConnection] = useState<LiveConnection | null>(null);
-  const [agoraConnection, setAgoraConnection] = useState<{ appId: string; channelName: string; token: string; uid: number | string } | null>(null);
+  const [agoraConnection, setAgoraConnection] = useState<AgoraConnection | null>(null);
   const [activeEngine, setActiveEngine] = useState<"livekit" | "agora">("livekit");
   const [venueSnapshot, setVenueSnapshot] = useState<VenueSnapshot | null>(null);
   const [venueStatus, setVenueStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -639,22 +646,24 @@ export function ConferenceExperience() {
         const response = await fetch("/api/agora-token", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ channelName: roomName, uid: Math.floor(Math.random() * 10000) }),
+          body: JSON.stringify({ channelName: roomName }),
         });
         const payload = (await response.json()) as { token?: string; appId?: string; channelName?: string; uid?: number; error?: string };
-        if (!response.ok || !payload.token) {
+        if (!response.ok || !payload.token || !payload.appId || !payload.channelName || !payload.uid) {
           throw new Error(payload.error || "Agora engine room token generation failed.");
         }
         setMicOn(choices.audioEnabled);
         setCameraOn(choices.videoEnabled);
         setAgoraConnection({
-          appId: payload.appId || "demo-agora-app-id",
-          channelName: payload.channelName || roomName,
+          appId: payload.appId,
+          channelName: payload.channelName,
           token: payload.token,
-          uid: payload.uid || 0,
+          uid: payload.uid,
+          choices: { ...choices, username: choices.username.trim() },
         });
+        setLiveConnection(null);
         setLiveDialogOpen(false);
-        setNotice("Connected to Agora SD-RTN Channel.");
+        setNotice("Agora credentials accepted. Connecting media devices…");
         return;
       }
 
@@ -676,6 +685,7 @@ export function ConferenceExperience() {
         roomName,
         choices: { ...choices, username: choices.username.trim() },
       });
+      setAgoraConnection(null);
       setLiveDialogOpen(false);
       setNotice("Connected securely to the LiveKit room.");
     } catch (error) {
@@ -770,7 +780,7 @@ export function ConferenceExperience() {
           leadSending={leadSending}
           captureLead={captureLead}
           openLiveRoom={openLiveRoom}
-          liveConnected={Boolean(liveConnection)}
+          liveConnected={Boolean(liveConnection || agoraConnection)}
           notify={setNotice}
         />
       ) : (
@@ -811,6 +821,8 @@ export function ConferenceExperience() {
           defaultName={producerUser?.displayName ?? ""}
           audioEnabled={micOn}
           videoEnabled={cameraOn}
+          engine={activeEngine}
+          setEngine={setActiveEngine}
           joining={liveJoining}
           error={liveError}
           close={() => setLiveDialogOpen(false)}
@@ -825,6 +837,9 @@ export function ConferenceExperience() {
           token={agoraConnection.token}
           uid={agoraConnection.uid}
           roomTitle={activeRoom.title}
+          displayName={agoraConnection.choices.username}
+          audioEnabled={agoraConnection.choices.audioEnabled}
+          videoEnabled={agoraConnection.choices.videoEnabled}
           onLeave={() => setAgoraConnection(null)}
           notify={setNotice}
         />
@@ -1045,7 +1060,7 @@ function AttendeeView({
             <button onClick={() => setChatOpen(!chatOpen)} aria-label="Toggle chat"><MessageSquareText size={18} /></button>
           </div>
           {(mode === "live" || room !== "expo") && <button className="join-live-button" onClick={() => openLiveRoom(room)}><Video size={15} />{liveConnected ? "Reopen live room" : "Open video lobby"}</button>}
-          <div className="connection-status"><i /> {mode === "demo" ? "Demo controls only" : liveConnected ? "LiveKit room connected" : venueSnapshot?.mediaAvailable ? "Secure media preflight ready" : venueSnapshot?.mediaError ?? "Checking LiveKit…"}</div>
+          <div className="connection-status"><i /> {mode === "demo" ? "Demo controls only" : liveConnected ? "Live media room connected" : venueSnapshot?.mediaAvailable ? "Secure media preflight ready" : venueSnapshot?.mediaError ?? "Checking media…"}</div>
         </div>
 
         {mode === "demo" && room === "expo" ? (
@@ -1164,6 +1179,8 @@ function LiveJoinDialog({
   defaultName,
   audioEnabled,
   videoEnabled,
+  engine,
+  setEngine,
   joining,
   error,
   close,
@@ -1175,6 +1192,8 @@ function LiveJoinDialog({
   defaultName: string;
   audioEnabled: boolean;
   videoEnabled: boolean;
+  engine: "livekit" | "agora";
+  setEngine: (engine: "livekit" | "agora") => void;
   joining: boolean;
   error: string | null;
   close: () => void;
@@ -1193,6 +1212,17 @@ function LiveJoinDialog({
             <span><ShieldCheck size={15} />Encrypted media</span>
             <span><Settings2 size={15} />Devices remain editable</span>
           </div>
+          <fieldset className="media-engine-picker" disabled={joining}>
+            <legend>Media provider</legend>
+            <label className={engine === "livekit" ? "active" : ""}>
+              <input type="radio" name="media-engine" value="livekit" checked={engine === "livekit"} onChange={() => setEngine("livekit")} />
+              <span><strong>LiveKit</strong><small>Primary conference infrastructure</small></span>
+            </label>
+            <label className={engine === "agora" ? "active" : ""}>
+              <input type="radio" name="media-engine" value="agora" checked={engine === "agora"} onChange={() => setEngine("agora")} />
+              <span><strong>Agora</strong><small>Alternative SD-RTN infrastructure</small></span>
+            </label>
+          </fieldset>
         </div>
         <PreJoin
           className="velocity-prejoin"
@@ -1285,17 +1315,14 @@ function ConnectedLiveRoom({
 function LiveCaptions() {
   const transcriptions = useTranscriptions();
   const visible = transcriptions.slice(-3);
+  const latestText = visible.at(-1)?.text ?? "";
   const [targetLang, setTargetLang] = useState<"en" | "es" | "fr" | "de" | "ja">("en");
   const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [translationError, setTranslationError] = useState<string | null>(null);
+  const [translationProvider, setTranslationProvider] = useState<string | null>(null);
 
   useEffect(() => {
-    if (targetLang === "en" || !visible.length) {
-      setTranslatedText(null);
-      return;
-    }
-
-    const latestText = visible[visible.length - 1]?.text;
-    if (!latestText) return;
+    if (targetLang === "en" || !latestText) return;
 
     let cancelled = false;
     async function translate() {
@@ -1305,29 +1332,41 @@ function LiveCaptions() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ text: latestText, targetLanguage: targetLang }),
         });
-        const data = (await res.json()) as { translated?: string };
+        const data = (await res.json()) as { translated?: string; provider?: string; error?: string };
+        if (!res.ok || !data.translated) throw new Error(data.error || "Translation is unavailable.");
         if (!cancelled && data.translated) {
           setTranslatedText(data.translated);
+          setTranslationProvider(data.provider || "Configured translation service");
+          setTranslationError(null);
         }
-      } catch (err) {
-        console.warn("Translation failed:", err);
+      } catch (translationFailure) {
+        if (!cancelled) {
+          setTranslatedText(null);
+          setTranslationProvider(null);
+          setTranslationError(translationFailure instanceof Error ? translationFailure.message : "Translation is unavailable.");
+        }
       }
     }
     void translate();
     return () => {
       cancelled = true;
     };
-  }, [visible, targetLang]);
+  }, [latestText, targetLang]);
 
   return (
     <div className={`live-captions ${visible.length ? "active" : ""}`} aria-live="polite" aria-label="Live captions">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "6px" }}>
         <span style={{ fontSize: "11px", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px", color: "var(--cyan)" }}>
-          <Globe size={13} /> AI REAL-TIME TRANSLATION (DEEPGRAM + OPENAI)
+          <Globe size={13} /> REAL-TIME TRANSLATION{translationProvider ? ` · ${translationProvider}` : ""}
         </span>
         <select
           value={targetLang}
-          onChange={(e) => setTargetLang(e.target.value as "en" | "es" | "fr" | "de" | "ja")}
+          onChange={(event) => {
+            setTargetLang(event.target.value as "en" | "es" | "fr" | "de" | "ja");
+            setTranslatedText(null);
+            setTranslationProvider(null);
+            setTranslationError(null);
+          }}
           style={{
             background: "rgba(0,0,0,0.5)",
             border: "1px solid var(--glass-border)",
@@ -1350,10 +1389,11 @@ function LiveCaptions() {
         ? visible.map((segment, index) => (
           <p key={`${segment.streamInfo.id}-${index}`}>
             <strong>{segment.participantInfo.identity}</strong>
-            {targetLang !== "en" && translatedText ? translatedText : segment.text}
+            {targetLang !== "en" && translatedText && index === visible.length - 1 ? translatedText : segment.text}
           </p>
         ))
         : <p><Captions size={15} /> Captions ready. Select target language above for real-time translation.</p>}
+      {translationError && <p className="live-caption-error">Translation unavailable: {translationError}</p>}
     </div>
   );
 }
@@ -1409,6 +1449,12 @@ function ProducerView({
   const [integrationBusy, setIntegrationBusy] = useState<"announcement" | "calendar" | null>(null);
   const [newRunItem, setNewRunItem] = useState({ scheduledTime: "", title: "", owner: "" });
   const openTickets = supportTickets.filter((ticket) => ticket.status !== "resolved");
+  const healthRooms = mode === "demo"
+    ? demoRooms
+    : liveRoomPresentation.map((item) => ({
+      ...item,
+      count: venueSnapshot?.rooms.find((room) => room.id === item.id)?.participantCount ?? 0,
+    }));
 
   const openProducerSection = (section: string, targetId: string) => {
     setProducerSection(section);
@@ -1741,8 +1787,8 @@ function ProducerView({
                 ))}
               </div>
             </div>
-            {(mode === "demo" ? demoRooms : liveRoomPresentation).filter((item) => item.id !== "stage").map((item) => {
-              const count = mode === "demo" ? "count" in item ? item.count : 0 : venueSnapshot?.rooms.find((room) => room.id === item.id)?.participantCount ?? 0;
+            {healthRooms.filter((item) => item.id !== "stage").map((item) => {
+              const count = item.count;
               const Icon = item.icon;
               return <div className="health-room compact-room" key={item.id}><span className={`health-icon ${item.accent}`}><Icon size={16} /></span><div><strong>{item.title}</strong><small>{count} {mode === "demo" ? "demo attendees" : "live participants"}</small></div><span className="ready-state"><i />{mode === "demo" ? "Demo" : count > 0 ? "Active" : "Empty"}</span></div>;
             })}

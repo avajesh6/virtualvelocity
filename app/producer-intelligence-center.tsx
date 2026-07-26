@@ -43,8 +43,8 @@ export function ProducerIntelligenceCenter({
 }) {
   const [data, setData] = useState<IntelligenceData | null>(null);
   const [busy, setBusy] = useState(false);
-  const [poll, setPoll] = useState({ room: VENUE_ROOMS[0].roomName, prompt: "", options: ["", ""] });
-  const [replay, setReplay] = useState({ room: VENUE_ROOMS[0].roomName, title: "", url: "", summary: "" });
+  const [poll, setPoll] = useState<{ room: string; prompt: string; options: string[] }>({ room: VENUE_ROOMS[0].roomName, prompt: "", options: ["", ""] });
+  const [replay, setReplay] = useState<{ room: string; title: string; url: string; summary: string }>({ room: VENUE_ROOMS[0].roomName, title: "", url: "", summary: "" });
   const [sponsor, setSponsor] = useState({ name: "", description: "", resourceUrl: "" });
   const [transcriptText, setTranscriptText] = useState("");
 
@@ -125,48 +125,20 @@ export function ProducerIntelligenceCenter({
       </div>
       <div className="intelligence-grid">
         <div className="intelligence-column">
-          {/* Infrastructure Provider Failover Switch */}
           <div className="recommendation" style={{ background: "rgba(0, 240, 255, 0.08)", border: "1px solid var(--cyan-glow)", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
               <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--cyan)", letterSpacing: "0.05em" }}>⚡ WEBRTC INFRASTRUCTURE ENGINE</span>
-              <span className="status-pill live" style={{ fontSize: 9 }}>ACTIVE & HEALTHY</span>
+              <span className="status-pill live" style={{ fontSize: 9 }}>ATTENDEE SELECTABLE</span>
             </div>
             <p style={{ margin: 0, fontSize: "12px", color: "var(--text-main)" }}>
-              Current engine: <strong>LiveKit Cloud Primary</strong> (Fallback: Agora SD-RTN)
+              LiveKit is the default. Attendees can explicitly select configured Agora infrastructure in the device lobby.
             </p>
-            <div style={{ display: "flex", gap: "8px", width: "100%", marginTop: "4px" }}>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ flex: 1, fontSize: 10, padding: "6px", justifyContent: "center" }}
-                onClick={() => notify("Active WebRTC Engine: LiveKit Cloud Primary.")}
-              >
-                📡 LiveKit Primary
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ flex: 1, fontSize: 10, padding: "6px", justifyContent: "center", background: "rgba(0, 240, 255, 0.12)", color: "var(--cyan)", borderColor: "var(--cyan-glow)" }}
-                onClick={() => notify("Failover Activated: Routed room media to Agora SD-RTN Global Network.")}
-              >
-                🌐 Agora SD-RTN Failover
-              </button>
-            </div>
           </div>
 
           <h3><Lightbulb size={17} />Producer copilot</h3>
           {!data?.recommendations.length && <p className="experience-empty">No operational recommendations right now.</p>}
           {data?.recommendations.map((recommendation) => <div className="recommendation" key={recommendation}><i /><p>{recommendation}</p></div>)}
           
-          <button
-            type="button"
-            className="secondary-button"
-            style={{ fontSize: 9, padding: "7px 10px", margin: "6px 0", width: "100%", justifyContent: "flex-start" }}
-            onClick={() => notify("Pushed instant operational crew alert to configured Slack/Teams webhooks.")}
-          >
-            📢 Broadcast alert to Slack/Teams crew channels
-          </button>
-
           <h3><RadioTower size={17} />Recent venue events</h3>
           <div className="telemetry-list">
             {!data?.telemetry.length && <p className="experience-empty">No verified webhook events received yet.</p>}
@@ -175,7 +147,7 @@ export function ProducerIntelligenceCenter({
           
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
             <h3><BarChart3 size={17} style={{ display: "inline", marginRight: 4 }} />Moderator queue</h3>
-            <span style={{ fontSize: 8, color: "var(--cyan)", fontWeight: 800 }}>✨ AI CLUSTERED BY TOPIC</span>
+            <span style={{ fontSize: 8, color: "var(--cyan)", fontWeight: 800 }}>RANKED BY VOTES</span>
           </div>
           <div className="moderator-list">
             {!data?.items.filter((item) => item.kind === "question" && item.status === "open").length && <p className="experience-empty">No open audience questions.</p>}
@@ -195,7 +167,7 @@ export function ProducerIntelligenceCenter({
                 const room = (document.getElementById("recording-room") as HTMLSelectElement | null)?.value;
                 void post({ action: "start-recording", room }, "Recording and configured RTMP streams started.");
               }}><RadioTower size={15} />Start recording &amp; RTMP Simulcast</button>}
-            <p>{mode === "demo" ? "Simulcasting active to YouTube Live, LinkedIn & Facebook." : data?.recordingConfigured || data?.streamingConfigured ? "Output destinations configured (S3 + RTMP)." : "Add an S3 destination or RTMP URLs (YouTube, LinkedIn, Twitch) in deployment settings."}</p>
+            <p>{mode === "demo" ? "Demo controls do not start recordings or external streams." : data?.recordingConfigured || data?.streamingConfigured ? "Output destinations configured (S3 + RTMP)." : "Add an S3 destination or RTMP URLs (YouTube, LinkedIn, Twitch) in deployment settings."}</p>
           </div>
           <button className="memory-generate-button" disabled={busy} onClick={() => void post({ action: "generate-memory", room: VENUE_ROOMS[0].roomName, title: "Main stage conference memory" }, "Searchable conference memory generated.")}><Sparkles size={15} />Generate summary, chapters &amp; actions</button>
           <form className="producer-mini-form" onSubmit={(event) => {

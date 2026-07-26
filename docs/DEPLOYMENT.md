@@ -24,6 +24,11 @@ Connecting a custom domain remains the final launch TODO.
 | `NEXT_PUBLIC_LIVEKIT_URL` | Yes for live media | No | LiveKit websocket URL |
 | `LIVEKIT_API_KEY` | Yes for live media | Yes | Server token and room administration |
 | `LIVEKIT_API_SECRET` | Yes for live media | Yes | Server token and room administration |
+| `AGORA_APP_ID` | Agora media | No | Alternative Agora project identifier |
+| `AGORA_APP_CERTIFICATE` | Agora media | Yes | Server-only Agora token signing secret |
+| `TRANSLATION_WEBHOOK_URL` | Translation | Yes | Approved real-time translation service |
+| `TRANSLATION_WEBHOOK_TOKEN` | Optional | Yes | Translation service bearer token |
+| `TRANSLATION_PROVIDER_NAME` | Optional | No | Provider label shown with translated captions |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes for sign-in | No | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes for sign-in | No | Browser/server token validation |
 | `PRODUCER_EMAILS` | Optional | Yes | Comma-separated producer allowlist |
@@ -45,6 +50,12 @@ Connecting a custom domain remains the final launch TODO.
 | `TRANSCRIPT_INGEST_TOKEN` | Captions | Yes | Shared credential for the approved transcription agent |
 
 Never commit real secret values. `.env.example` documents names only.
+
+The translation webhook receives `{ "text": "…", "targetLanguage": "es" }`
+and must return `{ "translated": "…", "provider": "optional label" }` within
+eight seconds. Exercise each enabled media provider and translation language in
+the deployment rehearsal; missing providers surface as unavailable and do not
+fall back to simulated success.
 
 ## LiveKit webhooks, captions, and Egress
 

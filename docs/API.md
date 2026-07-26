@@ -20,6 +20,26 @@ Allowed rooms are `velocity-venue-stage`, `velocity-venue-studio`,
 participant identity so duplicate display names do not collide. Successful responses include `token` and
 `serverUrl`. Missing service credentials return `503`.
 
+### `POST /api/agora-token`
+
+Creates a one-hour Agora publisher token for an allowlisted venue channel. The
+server generates the numeric UID to prevent deliberate attendee collisions.
+
+```json
+{ "channelName": "velocity-venue-stage" }
+```
+
+Successful responses include `token`, `appId`, `channelName`, and `uid` and are
+marked `no-store`. Invalid rooms return `400`; missing Agora credentials return
+`503`.
+
+### `POST /api/translation`
+
+Forwards up to 2,000 characters of finalized caption text to the explicitly
+configured translation service. Supported target languages are `es`, `fr`,
+`de`, and `ja`. The endpoint returns `503` when no provider is configured and
+never manufactures translated text, confidence scores, or provider names.
+
 ### `GET /api/venue`
 
 Returns current LiveKit participant totals for all venue rooms, the persisted

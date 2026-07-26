@@ -20,10 +20,10 @@ Browser
 Cloudflare Worker (vinext)
   |-- Static assets
   |-- Supabase token verification
-  |-- LiveKit token and RoomService APIs
+  |-- LiveKit and Agora token APIs
   |-- LiveKit Webhook and Egress APIs
   |-- Cloudflare D1
-  `-- Calendar / Slack / Teams / CRM / optional memory webhooks
+  `-- Calendar / Slack / Teams / CRM / optional memory and translation webhooks
 ```
 
 ## Application boundaries
@@ -34,6 +34,8 @@ Cloudflare Worker (vinext)
 | Product documentation | `app/docs/page.tsx` | Operator and evaluator help inside the deployed app |
 | Authentication | `app/producer-auth.ts` | Supabase token verification and producer authorization |
 | LiveKit token API | `app/api/livekit-token/route.ts` | Short-lived attendee room grants |
+| Agora token API | `app/api/agora-token/route.ts` | Allowlisted one-hour alternative media grants |
+| Translation API | `app/api/translation/route.ts` | Validated forwarding to an approved translation service |
 | Producer room API | `app/api/producer/room/route.ts` | Participant listing, mute, removal, and Rescue Mode |
 | Venue API | `app/api/venue/route.ts` | Public real-time room totals, agenda, and announcements |
 | Support API | `app/api/support/route.ts` | Authenticated attendee support requests |
@@ -48,7 +50,7 @@ Cloudflare Worker (vinext)
 
 ## Trust boundaries
 
-1. The browser never receives LiveKit API secrets, CRM credentials, or webhook URLs.
+1. The browser never receives LiveKit/Agora signing secrets, integration credentials, or webhook URLs.
 2. Producer UI state is not authorization. Every producer endpoint validates a Supabase bearer token and checks the role server-side.
 3. LiveKit room names are allowlisted. A client cannot mint a token for an arbitrary room.
 4. D1 is the source of truth for operational data. Live mode never falls back to sample records.

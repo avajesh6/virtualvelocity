@@ -8,7 +8,7 @@ A branded virtual-event venue for attendees paired with a live producer command 
 - Producer dashboard with real room counts, run-of-show control, announcements, audit history, and a persisted support queue
 - Live Rescue Mode for moving a disrupted session to a backup room
 - Explicit Demo mode for evaluating sample workflows without affecting live participants or records
-- Secure server-side LiveKit token endpoint and a real LiveKit conference room with device controls, screen sharing, chat, and reconnection handling; API credentials never reach the browser
+- Secure server-side LiveKit and Agora token endpoints with selectable real media rooms, device controls, remote subscriptions, and connection cleanup; API credentials never reach the browser
 - Camera and microphone preview with device selection before joining
 - Responsive participant layout, live participant/connection status, and shareable room links
 - Persistent light and dark appearance modes
@@ -41,6 +41,11 @@ Copy `.env.example` to `.env.local` and provide:
 NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
+AGORA_APP_ID=
+AGORA_APP_CERTIFICATE=
+TRANSLATION_WEBHOOK_URL=
+TRANSLATION_WEBHOOK_TOKEN=
+TRANSLATION_PROVIDER_NAME=
 CRM_WEBHOOK_URL=
 CRM_PROVIDER=generic
 CRM_AUTH_TOKEN=
@@ -64,6 +69,12 @@ For historical event intelligence, configure the LiveKit project webhook as
 destination and/or `LIVEKIT_RTMP_URLS`. Conference memory works without an AI
 provider by using a deterministic extractive summary; configure the optional
 private memory webhook only when transcript processing has been approved.
+
+Agora is an optional alternative media provider. Its token endpoint accepts only
+the four configured venue rooms and returns an explicit `503` until both Agora
+credentials are set. Real-time caption translation likewise remains unavailable
+until an approved translation webhook is configured; untranslated text is never
+presented as translated output.
 
 Producer mode uses Supabase Google OAuth or email/password sign-in. Google must be enabled in the Supabase provider settings as described in the deployment guide. Grant producer access separately with Supabase `app_metadata.role` (`producer` or `admin`) or the optional comma-separated `PRODUCER_EMAILS` allowlist.
 

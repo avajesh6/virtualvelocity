@@ -1,16 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Radio, ShieldCheck, Users } from "lucide-react";
+import type {
+  IAgoraRTCClient,
+  IAgoraRTCRemoteUser,
+  ILocalAudioTrack,
+  ILocalVideoTrack,
+  IRemoteVideoTrack,
+} from "agora-rtc-sdk-ng";
+import { AlertTriangle, Mic, MicOff, PhoneOff, Radio, ShieldCheck, Users, Video, VideoOff } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface AgoraRoomProps {
   appId: string;
   channelName: string;
   token: string;
-  uid: number | string;
+  uid: number;
   roomTitle: string;
+  displayName: string;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
   onLeave: () => void;
-  notify: (msg: string) => void;
+  notify: (message: string) => void;
+}
+
+function RemoteVideo({ track, uid }: { track: IRemoteVideoTrack; uid: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) track.play(containerRef.current);
+    return () => track.stop();
+  }, [track]);
+
+  return <div className="agora-video-surface" ref={containerRef} aria-label={`Video from participant ${uid}`} />;
 }
 
 export function AgoraRoom({
@@ -19,246 +40,166 @@ export function AgoraRoom({
   token,
   uid,
   roomTitle,
+  displayName,
+  audioEnabled,
+  videoEnabled,
   onLeave,
   notify,
 }: AgoraRoomProps) {
-  const [joined, setJoined] = useState(false);
-  const [micMuted, setMicMuted] = useState(false);
-  const [cameraMuted, setCameraMuted] = useState(false);
-  const [isDemo, setIsDemo] = useState(false);
+  const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const audioTrackRef = useRef<ILocalAudioTrack | null>(null);
+  const videoTrackRef = useRef<ILocalVideoTrack | null>(null);
+  const localVideoRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  const [error, setError] = useState<string | null>(null);
+  const [micEnabled, setMicEnabled] = useState(audioEnabled);
+  const [cameraEnabled, setCameraEnabled] = useState(videoEnabled);
+  const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
+
+  const refreshRemoteUsers = useCallback((client: IAgoraRTCClient) => {
+    setRemoteUsers([...client.remoteUsers]);
+  }, []);
 
   useEffect(() => {
-    if (token === "demo-agora-token-simulated" || appId === "demo-agora-app-id") {
-      setIsDemo(true);
-      setJoined(true);
-      notify("Connected to simulated Agora SD-RTN Channel.");
-      return;
-    }
+    let cancelled = false;
+    let client: IAgoraRTCClient | null = null;
+    let audioTrack: ILocalAudioTrack | null = null;
+    let videoTrack: ILocalVideoTrack | null = null;
 
-    let isMounted = true;
-    async function initAgora() {
+    const connect = async () => {
       try {
         const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
-        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        await client.join(appId, channelName, token, typeof uid === "number" ? uid : null);
-        
-        if (isMounted) {
-          setJoined(true);
-          notify(`Connected to Agora SD-RTN Channel: ${channelName}`);
-        }
-      } catch (err) {
-        console.warn("Agora connection failed, falling back to simulated engine mode:", err);
-        if (isMounted) {
-          setIsDemo(true);
-          setJoined(true);
-          notify("Agora SDK connection fallback initialized.");
-        }
-      }
-    }
+        client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        clientRef.current = client;
 
-    void initAgora();
-    return () => {
-      isMounted = false;
+        client.on("user-published", async (user, mediaType) => {
+          if (mediaType !== "audio" && mediaType !== "video") return;
+          await client?.subscribe(user, mediaType);
+          if (mediaType === "audio") user.audioTrack?.play();
+          if (client) refreshRemoteUsers(client);
+        });
+        client.on("user-unpublished", () => client && refreshRemoteUsers(client));
+        client.on("user-left", () => client && refreshRemoteUsers(client));
+
+        await client.join(appId, channelName, token, uid);
+        if (cancelled) {
+          await client.leave();
+          return;
+        }
+
+        [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+          { AEC: true, ANS: true, AGC: true },
+          { encoderConfig: "720p_2" },
+        );
+        audioTrackRef.current = audioTrack;
+        videoTrackRef.current = videoTrack;
+        await audioTrack.setEnabled(audioEnabled);
+        await videoTrack.setEnabled(videoEnabled);
+        await client.publish([audioTrack, videoTrack]);
+        if (videoEnabled && localVideoRef.current) videoTrack.play(localVideoRef.current);
+
+        setStatus("connected");
+        refreshRemoteUsers(client);
+        notify(`Connected securely to ${channelName} with Agora.`);
+      } catch (connectionError) {
+        audioTrack?.stop();
+        audioTrack?.close();
+        videoTrack?.stop();
+        videoTrack?.close();
+        if (client) await client.leave().catch(() => undefined);
+        audioTrackRef.current = null;
+        videoTrackRef.current = null;
+        clientRef.current = null;
+        const message = connectionError instanceof Error ? connectionError.message : "Agora could not connect.";
+        setError(message);
+        setStatus("error");
+        notify("Agora connection failed. No simulated connection was shown.");
+      }
     };
-  }, [appId, channelName, token, uid, notify]);
+
+    void connect();
+    return () => {
+      cancelled = true;
+      audioTrack?.stop();
+      audioTrack?.close();
+      videoTrack?.stop();
+      videoTrack?.close();
+      audioTrackRef.current = null;
+      videoTrackRef.current = null;
+      clientRef.current = null;
+      if (client) {
+        client.removeAllListeners();
+        void client.leave().catch(() => undefined);
+      }
+    };
+  }, [appId, audioEnabled, channelName, notify, refreshRemoteUsers, token, uid, videoEnabled]);
+
+  const toggleMicrophone = async () => {
+    const next = !micEnabled;
+    await audioTrackRef.current?.setEnabled(next);
+    setMicEnabled(next);
+    notify(next ? "Agora microphone enabled." : "Agora microphone muted.");
+  };
+
+  const toggleCamera = async () => {
+    const next = !cameraEnabled;
+    await videoTrackRef.current?.setEnabled(next);
+    if (next && localVideoRef.current) videoTrackRef.current?.play(localVideoRef.current);
+    else videoTrackRef.current?.stop();
+    setCameraEnabled(next);
+    notify(next ? "Agora camera enabled." : "Agora camera disabled.");
+  };
 
   return (
-    <div className="agora-room-container" style={{
-      background: "var(--ink-2)",
-      borderRadius: "16px",
-      border: "1px solid var(--glass-border)",
-      padding: "20px",
-      marginTop: "16px",
-      backdropFilter: "blur(16px)",
-      boxShadow: "0 12px 40px rgba(0,0,0,0.4)"
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span className="status-pill live" style={{ background: "rgba(0, 240, 255, 0.15)", color: "var(--cyan)", border: "1px solid var(--cyan-glow)" }}>
-            <Radio size={12} style={{ marginRight: 4 }} /> AGORA SD-RTN ENGINE
-          </span>
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-main)" }}>{roomTitle}</h3>
-        </div>
-        <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
-          <ShieldCheck size={14} color="var(--lime)" /> {isDemo ? "Simulated High-Definition Stream" : "Ultra-Low Latency Active"}
-        </span>
-      </div>
-
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-        gap: "16px",
-        minHeight: "260px",
-        alignItems: "center"
-      }}>
-        {/* Main User Stream Tile */}
-        <div style={{
-          position: "relative",
-          background: "radial-gradient(circle at center, rgba(15, 20, 29, 0.9) 0%, rgba(7, 9, 14, 0.95) 100%)",
-          borderRadius: "12px",
-          height: "220px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "1px solid var(--cyan-glow)",
-          boxShadow: "0 4px 20px rgba(0, 240, 255, 0.1)"
-        }}>
-          <div style={{
-            width: "64px",
-            height: "64px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, var(--cyan), var(--violet))",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 800,
-            fontSize: "22px",
-            color: "#fff",
-            marginBottom: "12px",
-            boxShadow: "0 0 15px rgba(0, 240, 255, 0.4)"
-          }}>
-            YOU
+    <div className="live-room-overlay" role="dialog" aria-modal="true" aria-label={`${roomTitle} Agora room`}>
+      <div className="live-room-shell agora-room-container">
+        <header className="live-room-header">
+          <div className="live-room-identity">
+            <Radio size={20} />
+            <div><span className="status-pill live">AGORA</span><strong>{roomTitle}</strong><small>{channelName}</small></div>
           </div>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main)" }}>Active Broadcaster (Local)</span>
-          <span style={{ fontSize: "11px", color: "var(--cyan)", marginTop: "4px" }}>
-            {cameraMuted ? "Video Muted" : "HD 1080p60 • 48kHz Audio"}
-          </span>
-
-          <div style={{ position: "absolute", bottom: "12px", left: "12px", display: "flex", gap: "6px" }}>
-            <span style={{ background: "rgba(0,0,0,0.6)", padding: "3px 8px", borderRadius: "6px", fontSize: "10px", color: "#fff" }}>
-              {micMuted ? <MicOff size={10} color="var(--coral)" /> : <Mic size={10} color="var(--lime)" />} {micMuted ? "Muted" : "Live"}
-            </span>
+          <div className="conference-room-meta">
+            <span><Users size={15} />{remoteUsers.length + 1} connected</span>
+            <span><ShieldCheck size={15} />{status === "connected" ? "Encrypted media active" : "Connecting media"}</span>
           </div>
-        </div>
+          <button className="leave-room-button" type="button" onClick={onLeave}><PhoneOff size={17} />Leave room</button>
+        </header>
 
-        {/* Remote Broadcaster Tile 1 */}
-        <div style={{
-          position: "relative",
-          background: "rgba(15, 20, 29, 0.6)",
-          borderRadius: "12px",
-          height: "220px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "1px solid var(--glass-border)"
-        }}>
-          <div style={{
-            width: "56px",
-            height: "56px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, var(--coral), var(--lime))",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 800,
-            fontSize: "18px",
-            color: "#fff",
-            marginBottom: "10px"
-          }}>
-            CR
+        {error ? (
+          <div className="live-error" role="alert">
+            <AlertTriangle size={18} />
+            <span><strong>Unable to join with Agora</strong>{error}</span>
+            <button type="button" className="secondary-button" onClick={onLeave}>Return to venue</button>
           </div>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main)" }}>Cris (Keynote Host)</span>
-          <span style={{ fontSize: "11px", color: "var(--lime)", marginTop: "4px" }}>Agora Global Edge Node #4</span>
-        </div>
-
-        {/* Remote Broadcaster Tile 2 */}
-        <div style={{
-          position: "relative",
-          background: "rgba(15, 20, 29, 0.6)",
-          borderRadius: "12px",
-          height: "220px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "1px solid var(--glass-border)"
-        }}>
-          <div style={{
-            width: "56px",
-            height: "56px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, var(--violet), #3b82f6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 800,
-            fontSize: "18px",
-            color: "#fff",
-            marginBottom: "10px"
-          }}>
-            AV
+        ) : (
+          <div className="agora-participant-grid" aria-busy={status === "connecting"}>
+            <article className="agora-participant-tile">
+              <div className="agora-video-surface" ref={localVideoRef} />
+              {!cameraEnabled && <div className="agora-avatar">{displayName.slice(0, 2).toUpperCase()}</div>}
+              <footer><strong>{displayName} (You)</strong><span>{micEnabled ? <Mic size={13} /> : <MicOff size={13} />}</span></footer>
+            </article>
+            {remoteUsers.map((user) => (
+              <article className="agora-participant-tile" key={String(user.uid)}>
+                {user.hasVideo && user.videoTrack
+                  ? <RemoteVideo track={user.videoTrack} uid={String(user.uid)} />
+                  : <div className="agora-avatar">{String(user.uid).slice(-2)}</div>}
+                <footer><strong>Participant {user.uid}</strong><span>{user.hasAudio ? <Mic size={13} /> : <MicOff size={13} />}</span></footer>
+              </article>
+            ))}
+            {status === "connecting" && <p className="experience-empty">Connecting devices and publishing encrypted media…</p>}
           </div>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main)" }}>Audience Voice Node</span>
-          <span style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>Sub-second synchronized</span>
-        </div>
-      </div>
+        )}
 
-      {/* Agora Action Bar */}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "12px", marginTop: "20px" }}>
-        <button
-          type="button"
-          onClick={() => { setMicMuted(!micMuted); notify(micMuted ? "Agora microphone unmuted." : "Agora microphone muted."); }}
-          style={{
-            background: micMuted ? "rgba(255, 77, 106, 0.2)" : "rgba(255, 255, 255, 0.08)",
-            border: micMuted ? "1px solid var(--coral)" : "1px solid var(--glass-border)",
-            color: micMuted ? "var(--coral)" : "#fff",
-            padding: "10px 18px",
-            borderRadius: "30px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontWeight: 600,
-            fontSize: "13px"
-          }}
-        >
-          {micMuted ? <MicOff size={16} /> : <Mic size={16} />}
-          {micMuted ? "Unmute Mic" : "Mute Mic"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => { setCameraMuted(!cameraMuted); notify(cameraMuted ? "Agora camera enabled." : "Agora camera disabled."); }}
-          style={{
-            background: cameraMuted ? "rgba(255, 77, 106, 0.2)" : "rgba(255, 255, 255, 0.08)",
-            border: cameraMuted ? "1px solid var(--coral)" : "1px solid var(--glass-border)",
-            color: cameraMuted ? "var(--coral)" : "#fff",
-            padding: "10px 18px",
-            borderRadius: "30px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontWeight: 600,
-            fontSize: "13px"
-          }}
-        >
-          {cameraMuted ? <VideoOff size={16} /> : <Video size={16} />}
-          {cameraMuted ? "Start Video" : "Stop Video"}
-        </button>
-
-        <button
-          type="button"
-          onClick={onLeave}
-          style={{
-            background: "linear-gradient(135deg, var(--coral), #dc2626)",
-            border: "none",
-            color: "#fff",
-            padding: "10px 22px",
-            borderRadius: "30px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontWeight: 700,
-            fontSize: "13px",
-            boxShadow: "0 4px 15px rgba(255, 77, 106, 0.3)"
-          }}
-        >
-          <PhoneOff size={16} /> Disconnect Agora
-        </button>
+        {status === "connected" && (
+          <div className="agora-action-bar">
+            <button type="button" className={!micEnabled ? "off" : ""} onClick={() => void toggleMicrophone()}>
+              {micEnabled ? <Mic size={17} /> : <MicOff size={17} />}{micEnabled ? "Mute" : "Unmute"}
+            </button>
+            <button type="button" className={!cameraEnabled ? "off" : ""} onClick={() => void toggleCamera()}>
+              {cameraEnabled ? <Video size={17} /> : <VideoOff size={17} />}{cameraEnabled ? "Stop video" : "Start video"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,60 +1,57 @@
 export async function POST(request: Request) {
+  let body: { text?: string; targetLanguage?: string };
   try {
-    const { text, targetLanguage } = (await request.json()) as {
-      text?: string;
-      targetLanguage?: string;
-    };
+    body = (await request.json()) as { text?: string; targetLanguage?: string };
+  } catch {
+    return Response.json({ error: "A valid JSON body is required." }, { status: 400 });
+  }
 
-    if (!text) {
-      return Response.json({ error: "Text prompt is required for translation." }, { status: 400 });
-    }
+  const text = body.text?.trim();
+  const targetLanguage = body.targetLanguage?.trim().toLowerCase();
+  const supportedLanguages = new Set(["es", "fr", "de", "ja"]);
+  if (!text || text.length > 2_000) {
+    return Response.json({ error: "Text between 1 and 2,000 characters is required." }, { status: 400 });
+  }
+  if (!targetLanguage || !supportedLanguages.has(targetLanguage)) {
+    return Response.json({ error: "A supported target language is required." }, { status: 400 });
+  }
 
-    const target = targetLanguage || "es"; // Default to Spanish
+  const endpoint = process.env.TRANSLATION_WEBHOOK_URL;
+  if (!endpoint) {
+    return Response.json({ error: "Real-time translation is not configured." }, { status: 503 });
+  }
 
-    // Mock/Simulated real-time translation dictionary for key conference phrases
-    const translations: Record<string, Record<string, string>> = {
-      es: {
-        "Welcome to Virtual Velocity Main Stage": "Bienvenido al Escenario Principal de Virtual Velocity",
-        "Building trust in an AI-first world": "Construyendo confianza en un mundo enfocado en la IA",
-        "Please feel free to ask questions in the Q&A panel": "Por favor siéntase libre de hacer preguntas en el panel de Q&A",
-        "The next session begins in 5 minutes": "La próxima sesión comienza en 5 minutos",
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(process.env.TRANSLATION_WEBHOOK_TOKEN
+          ? { authorization: `Bearer ${process.env.TRANSLATION_WEBHOOK_TOKEN}` }
+          : {}),
       },
-      fr: {
-        "Welcome to Virtual Velocity Main Stage": "Bienvenue sur la Scène Principale de Virtual Velocity",
-        "Building trust in an AI-first world": "Bâtir la confiance dans un monde axé sur l'IA",
-        "Please feel free to ask questions in the Q&A panel": "N'hésitez pas à poser des questions dans le panneau Q&R",
-        "The next session begins in 5 minutes": "La prochaine session commence dans 5 minutes",
-      },
-      de: {
-        "Welcome to Virtual Velocity Main Stage": "Willkommen auf der Hauptbühne von Virtual Velocity",
-        "Building trust in an AI-first world": "Vertrauen aufbauen in einer KI-ersten Welt",
-        "Please feel free to ask questions in the Q&A panel": "Bitte stellen Sie Fragen im Q&A-Bereich",
-        "The next session begins in 5 minutes": "Die nächste Sitzung beginnt in 5 Minuten",
-      },
-      ja: {
-        "Welcome to Virtual Velocity Main Stage": "Virtual Velocityメインステージへようこそ",
-        "Building trust in an AI-first world": "AI優先の世界で信頼を築く",
-        "Please feel free to ask questions in the Q&A panel": "Q&Aパネルで質問を投稿してください",
-        "The next session begins in 5 minutes": "次のセッションは5分後に始まります",
-      },
-    };
-
-    const translatedText =
-      translations[target]?.[text] ||
-      `[${target.toUpperCase()} Translation]: ${text} (Live AI translated)`;
-
-    return Response.json({
-      original: text,
-      translated: translatedText,
-      targetLanguage: target,
-      provider: "Deepgram + OpenAI Neural Translation",
-      confidence: 0.98,
-      latencyMs: 140,
+      body: JSON.stringify({ text, targetLanguage }),
+      signal: AbortSignal.timeout(8_000),
     });
-  } catch (error) {
+    const result = (await response.json()) as { translated?: string; provider?: string };
+    if (!response.ok || !result.translated?.trim()) {
+      return Response.json({ error: "The translation provider did not return a translation." }, { status: 502 });
+    }
     return Response.json(
-      { error: error instanceof Error ? error.message : "Translation pipeline failed." },
-      { status: 500 }
+      {
+        original: text,
+        translated: result.translated.trim(),
+        targetLanguage,
+        provider: result.provider || process.env.TRANSLATION_PROVIDER_NAME || "Configured translation service",
+        latencyMs: Date.now() - startedAt,
+      },
+      { headers: { "cache-control": "no-store" } },
     );
+  } catch (error) {
+    const message = error instanceof Error && error.name === "TimeoutError"
+      ? "The translation provider timed out."
+      : "The translation provider is unavailable.";
+    return Response.json({ error: message }, { status: 502 });
   }
 }

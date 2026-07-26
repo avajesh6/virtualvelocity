@@ -9,7 +9,6 @@
   --panel-2: #192332;
   --line: rgba(255, 255, 255, 0.08);
   --line-bright: rgba(255, 255, 255, 0.16);
-  --muted: #8c9ba stroke;
   --muted: #8b99a8;
   --paper: #f4f6f8;
   --text: #f0f4f8;
@@ -42,6 +41,30 @@
   --glass-bg: rgba(15, 20, 29, 0.65);
   --glass-border: rgba(255, 255, 255, 0.09);
 }
+
+/* Media provider selection and Agora room */
+.media-engine-picker {
+  border: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 14px 0 0;
+  padding: 0;
+}
+.media-engine-picker legend { color: var(--muted); font-size: 11px; font-weight: 700; margin-bottom: 7px; text-transform: uppercase; }
+.media-engine-picker label { align-items: center; border: 1px solid var(--glass-border); border-radius: 10px; cursor: pointer; display: flex; gap: 9px; padding: 10px; }
+.media-engine-picker label.active { background: rgba(0, 240, 255, .08); border-color: var(--cyan); }
+.media-engine-picker label span { display: flex; flex-direction: column; }
+.media-engine-picker label small { color: var(--muted); font-size: 10px; }
+.agora-room-container { display: flex; flex-direction: column; min-height: min(760px, 92vh); }
+.agora-participant-grid { display: grid; flex: 1; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); overflow: auto; padding: 18px; }
+.agora-participant-tile { background: var(--ink-2); border: 1px solid var(--glass-border); border-radius: 14px; min-height: 240px; overflow: hidden; position: relative; }
+.agora-video-surface { height: 100%; min-height: 240px; width: 100%; }
+.agora-avatar { align-items: center; background: linear-gradient(135deg, var(--cyan), var(--violet)); display: flex; font-size: 30px; font-weight: 800; inset: 0; justify-content: center; position: absolute; }
+.agora-participant-tile footer { align-items: center; background: linear-gradient(transparent, rgba(0, 0, 0, .85)); bottom: 0; color: white; display: flex; justify-content: space-between; left: 0; padding: 28px 14px 12px; position: absolute; right: 0; z-index: 2; }
+.agora-action-bar { display: flex; gap: 10px; justify-content: center; padding: 14px; }
+.agora-action-bar button { align-items: center; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 999px; color: var(--text); display: flex; gap: 7px; padding: 10px 16px; }
+.agora-action-bar button.off { border-color: var(--coral); color: var(--coral); }
 
 [data-theme="light"] {
   color-scheme: light;

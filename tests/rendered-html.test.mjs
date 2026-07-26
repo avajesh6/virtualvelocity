@@ -39,9 +39,11 @@ test("ships the two-sided Velocity Venue experience", async () => {
 });
 
 test("keeps third-party credentials server-side", async () => {
-  const [client, tokenRoute, producerRoute, envExample] = await Promise.all([
+  const [client, tokenRoute, agoraTokenRoute, translationRoute, producerRoute, envExample] = await Promise.all([
     readFile(new URL("app/conference-experience.tsx", root), "utf8"),
     readFile(new URL("app/api/livekit-token/route.ts", root), "utf8"),
+    readFile(new URL("app/api/agora-token/route.ts", root), "utf8"),
+    readFile(new URL("app/api/translation/route.ts", root), "utf8"),
     readFile(new URL("app/api/producer/room/route.ts", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
@@ -50,7 +52,15 @@ test("keeps third-party credentials server-side", async () => {
   assert.match(tokenRoute, /cache-control/);
   assert.match(tokenRoute, /isVenueRoomName/);
   assert.match(tokenRoute, /crypto\.randomUUID/);
+  assert.match(agoraTokenRoute, /isVenueRoomName/);
+  assert.match(agoraTokenRoute, /crypto\.getRandomValues/);
+  assert.match(agoraTokenRoute, /cache-control/);
+  assert.match(translationRoute, /TRANSLATION_WEBHOOK_URL/);
+  assert.match(translationRoute, /AbortSignal\.timeout/);
+  assert.doesNotMatch(translationRoute, /Live AI translated|confidence: 0\.98/);
   assert.match(envExample, /LIVEKIT_API_KEY=/);
+  assert.match(envExample, /AGORA_APP_CERTIFICATE=/);
+  assert.match(envExample, /TRANSLATION_WEBHOOK_URL=/);
   assert.match(envExample, /CRM_WEBHOOK_URL=/);
   assert.match(producerRoute, /authorizeProducerRequest/);
   assert.match(producerRoute, /moveParticipant/);
@@ -118,7 +128,7 @@ test("ships the attendee engagement and conference memory layer", async () => {
     readFile(new URL("app/api/experience/route.ts", root), "utf8"),
     readFile(new URL("db/schema.ts", root), "utf8"),
   ]);
-  assert.match(hub, /Polls & Q&amp;A/);
+  assert.match(hub, /Polls &amp; Q&amp;A/);
   assert.match(hub, /Opt-in networking profile/);
   assert.match(hub, /Search event transcript/);
   assert.match(hub, /Reduced-data mode/);
