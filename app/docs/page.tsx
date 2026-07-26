@@ -138,7 +138,7 @@ export default function DocumentationPage() {
             <h3>LiveKit</h3>
             <p>Provides device preview, real-time media, captions, participant administration, signed event webhooks, room recovery, recording, and streaming. Browser clients receive short-lived room tokens; API credentials remain server-side.</p>
             <h3>Agora</h3>
-            <p>Provides an attendee-selectable alternative media path when configured. The server validates the venue-room allowlist and issues short-lived channel tokens; Demo mode never requests one.</p>
+            <p>Provides an attendee-selectable audio/video path when configured. The server validates the venue-room allowlist and issues short-lived channel tokens; room chat, screen sharing, and LiveKit captions remain LiveKit-only. Demo mode never requests one.</p>
             <h3>Caption translation</h3>
             <p>Finalized LiveKit captions can be sent to an approved private translation webhook. The interface labels unavailable translation clearly and never presents untranslated text as translated output.</p>
             <h3>Supabase</h3>
@@ -176,7 +176,7 @@ export default function DocumentationPage() {
       <footer className="docs-footer">
         <span>VELOCITY VENUE</span>
         <p>For deployment, API, schema, and maintenance details, see the repository documentation.</p>
-        <Link href="/">Return to the live venue</Link>
+        <Link href="/">Return to the venue</Link>
       </footer>
     </main>
   );

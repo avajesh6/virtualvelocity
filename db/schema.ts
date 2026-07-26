@@ -121,6 +121,8 @@ export const connectionRequests = sqliteTable("connection_requests", {
   recipientId: text("recipient_id").notNull(),
   recipientName: text("recipient_name").notNull(),
   status: text("status").notNull().default("pending"),
+  startsAt: text("starts_at"),
+  calendarStatus: text("calendar_status"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   uniqueIndex("connection_request_pair_unique").on(table.requesterId, table.recipientId),

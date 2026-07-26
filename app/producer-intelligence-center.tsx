@@ -13,6 +13,7 @@ import {
   Video,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "./accessible-dialog";
 import { VENUE_ROOMS } from "./venue-config";
 
 type IntelligenceData = {
@@ -47,6 +48,8 @@ export function ProducerIntelligenceCenter({
   const [replay, setReplay] = useState<{ room: string; title: string; url: string; summary: string }>({ room: VENUE_ROOMS[0].roomName, title: "", url: "", summary: "" });
   const [sponsor, setSponsor] = useState({ name: "", description: "", resourceUrl: "" });
   const [transcriptText, setTranscriptText] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [recordingConfirmation, setRecordingConfirmation] = useState<{ body: Record<string, unknown>; title: string; description: string; success: string } | null>(null);
 
   const refresh = useCallback(async () => {
     if (mode === "demo") {
@@ -62,6 +65,7 @@ export function ProducerIntelligenceCenter({
         recordingConfigured: true,
         streamingConfigured: true,
       });
+      setUpdatedAt(new Date());
       return;
     }
     try {
@@ -72,6 +76,7 @@ export function ProducerIntelligenceCenter({
       const payload = await response.json() as IntelligenceData & { error?: string };
       if (!response.ok) throw new Error(payload.error || "Event intelligence is unavailable.");
       setData(payload);
+      setUpdatedAt(new Date());
     } catch (error) {
       notify(error instanceof Error ? error.message : "Event intelligence is unavailable.");
     }
@@ -84,7 +89,7 @@ export function ProducerIntelligenceCenter({
     return () => window.clearInterval(interval);
   }, [mode, refresh]);
 
-  const post = async (body: Record<string, unknown>, success: string) => {
+  const post = async (body: Record<string, unknown>, success: string): Promise<boolean> => {
     if (mode === "demo") {
       // Producer demo actions mutate only the isolated control-tower snapshot.
       // This gives evaluators visible feedback without invoking media or webhooks.
@@ -118,7 +123,7 @@ export function ProducerIntelligenceCenter({
         return current;
       });
       notify(`Demo: ${success} No live system was changed.`);
-      return;
+      return true;
     }
     setBusy(true);
     try {
@@ -131,8 +136,10 @@ export function ProducerIntelligenceCenter({
       if (!response.ok) throw new Error(payload.error || "The operation failed.");
       notify(success);
       await refresh();
+      return true;
     } catch (error) {
       notify(error instanceof Error ? error.message : "The operation failed.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -146,7 +153,7 @@ export function ProducerIntelligenceCenter({
     <section className="producer-intelligence scroll-target" id="producer-intelligence">
       <div className="panel-head">
         <div><span className="eyebrow"><Sparkles size={13} /> VENUE INTELLIGENCE</span><h2>Control tower</h2></div>
-        <span className="intelligence-live"><i />{mode === "demo" ? "DEMO TELEMETRY" : "LIVEKIT WEBHOOK DATA"}</span>
+        <span className="intelligence-live"><i />{mode === "demo" ? "DEMO TELEMETRY" : "LIVEKIT WEBHOOK DATA"}{updatedAt ? ` · Updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}</span>
       </div>
       <div className="intelligence-metrics">
         <span><Activity size={17} /><small>JOIN EVENTS</small><strong>{data?.metrics.joins ?? 0}</strong></span>
@@ -193,10 +200,10 @@ export function ProducerIntelligenceCenter({
           <div className="recording-control">
             <select id="recording-room" aria-label="Recording room" defaultValue={VENUE_ROOMS[0].roomName}>{VENUE_ROOMS.map((room) => <option value={room.roomName} key={room.id}>{room.title}</option>)}</select>
             {activeRecording
-              ? <button className="stop" disabled={busy} onClick={() => void post({ action: "stop-recording", egressId: activeRecording.egressId }, "Recording stop requested.")}><CircleStop size={15} />Stop recording</button>
+              ? <button className="stop" disabled={busy} onClick={() => setRecordingConfirmation({ body: { action: "stop-recording", egressId: activeRecording.egressId }, title: "Stop this recording?", description: "The current recording and configured live outputs will be stopped. This cannot be resumed as the same recording.", success: "Recording stop requested." })}><CircleStop size={15} />Stop recording</button>
               : <button disabled={busy || (mode === "live" && !data?.recordingConfigured && !data?.streamingConfigured)} onClick={() => {
                 const room = (document.getElementById("recording-room") as HTMLSelectElement | null)?.value;
-                void post({ action: "start-recording", room }, "Recording and configured RTMP streams started.");
+                setRecordingConfirmation({ body: { action: "start-recording", room }, title: "Start recording and live outputs?", description: `This will record ${VENUE_ROOMS.find((item) => item.roomName === room)?.title ?? "the selected room"} and start every configured RTMP destination.`, success: "Recording and configured RTMP streams started." });
               }}><RadioTower size={15} />Start recording &amp; RTMP Simulcast</button>}
             <p>{mode === "demo" ? "Demo controls do not start recordings or external streams." : data?.recordingConfigured || data?.streamingConfigured ? "Output destinations configured (S3 + RTMP)." : "Add an S3 destination or RTMP URLs (YouTube, LinkedIn, Twitch) in deployment settings."}</p>
           </div>
@@ -207,7 +214,7 @@ export function ProducerIntelligenceCenter({
               const [speaker, ...text] = line.split(":");
               return { speakerName: text.length ? speaker.trim() : "Speaker", text: (text.length ? text.join(":") : speaker).trim(), language: "en", startMs: index * 5000 };
             }).filter((segment) => segment.text);
-            void post({ action: "import-transcript", room: VENUE_ROOMS[0].roomName, transcript }, "Finalized transcript imported.").then(() => setTranscriptText(""));
+            void post({ action: "import-transcript", room: VENUE_ROOMS[0].roomName, transcript }, "Finalized transcript imported.").then((ok) => ok && setTranscriptText(""));
           }}>
             <h3><Captions size={17} />Import finalized transcript</h3>
             <textarea placeholder={"Speaker: Finalized caption text\nSpeaker: Next caption segment"} value={transcriptText} onChange={(event) => setTranscriptText(event.target.value)} required />
@@ -215,7 +222,7 @@ export function ProducerIntelligenceCenter({
           </form>
           <form className="producer-mini-form" onSubmit={(event) => {
             event.preventDefault();
-            void post({ action: "create-poll", ...poll }, "Audience poll published.").then(() => setPoll((value) => ({ ...value, prompt: "", options: ["", ""] })));
+            void post({ action: "create-poll", ...poll }, "Audience poll published.").then((ok) => ok && setPoll((value) => ({ ...value, prompt: "", options: ["", ""] })));
           }}>
             <h3><BarChart3 size={17} />Publish a poll</h3>
             <select value={poll.room} onChange={(event) => setPoll((value) => ({ ...value, room: event.target.value }))}>{VENUE_ROOMS.map((room) => <option value={room.roomName} key={room.id}>{room.title}</option>)}</select>
@@ -225,7 +232,7 @@ export function ProducerIntelligenceCenter({
           </form>
           <form className="producer-mini-form" onSubmit={(event) => {
             event.preventDefault();
-            void post({ action: "publish-replay", ...replay }, "Replay published to the conference memory.").then(() => setReplay((value) => ({ ...value, title: "", url: "", summary: "" })));
+            void post({ action: "publish-replay", ...replay }, "Replay published to the conference memory.").then((ok) => ok && setReplay((value) => ({ ...value, title: "", url: "", summary: "" })));
           }}>
             <h3><CloudUpload size={17} />Publish a replay</h3>
             <select value={replay.room} onChange={(event) => setReplay((value) => ({ ...value, room: event.target.value }))}>{VENUE_ROOMS.map((room) => <option value={room.roomName} key={room.id}>{room.title}</option>)}</select>
@@ -236,7 +243,7 @@ export function ProducerIntelligenceCenter({
           </form>
           <form className="producer-mini-form" onSubmit={(event) => {
             event.preventDefault();
-            void post({ action: "publish-sponsor", ...sponsor }, "Sponsor booth published.").then(() => setSponsor({ name: "", description: "", resourceUrl: "" }));
+            void post({ action: "publish-sponsor", ...sponsor }, "Sponsor booth published.").then((ok) => ok && setSponsor({ name: "", description: "", resourceUrl: "" }));
           }}>
             <h3><Sparkles size={17} />Publish a sponsor booth</h3>
             <input placeholder="Sponsor name" value={sponsor.name} onChange={(event) => setSponsor((value) => ({ ...value, name: event.target.value }))} required />
@@ -246,6 +253,15 @@ export function ProducerIntelligenceCenter({
           </form>
         </div>
       </div>
+      {recordingConfirmation && <ConfirmDialog
+        title={recordingConfirmation.title}
+        description={recordingConfirmation.description}
+        confirmLabel={recordingConfirmation.body.action === "stop-recording" ? "Stop recording" : "Start outputs"}
+        danger={recordingConfirmation.body.action === "stop-recording"}
+        busy={busy}
+        onCancel={() => setRecordingConfirmation(null)}
+        onConfirm={() => void post(recordingConfirmation.body, recordingConfirmation.success).then((ok) => ok && setRecordingConfirmation(null))}
+      />}
     </section>
   );
 }

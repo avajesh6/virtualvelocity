@@ -61,6 +61,14 @@ export function AgoraRoom({
   }, []);
 
   useEffect(() => {
+    const leaveOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onLeave();
+    };
+    window.addEventListener("keydown", leaveOnEscape);
+    return () => window.removeEventListener("keydown", leaveOnEscape);
+  }, [onLeave]);
+
+  useEffect(() => {
     let cancelled = false;
     let client: IAgoraRTCClient | null = null;
     let audioTrack: ILocalAudioTrack | null = null;
@@ -87,16 +95,19 @@ export function AgoraRoom({
           return;
         }
 
-        [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-          { AEC: true, ANS: true, AGC: true },
-          { encoderConfig: "720p_2" },
-        );
-        audioTrackRef.current = audioTrack;
-        videoTrackRef.current = videoTrack;
-        await audioTrack.setEnabled(audioEnabled);
-        await videoTrack.setEnabled(videoEnabled);
-        await client.publish([audioTrack, videoTrack]);
-        if (videoEnabled && localVideoRef.current) videoTrack.play(localVideoRef.current);
+        // Create only the devices selected in the lobby. This is important for
+        // reduced-data mode and avoids unnecessary permission prompts.
+        if (audioEnabled) {
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ AEC: true, ANS: true, AGC: true });
+          audioTrackRef.current = audioTrack;
+        }
+        if (videoEnabled) {
+          videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "720p_2" });
+          videoTrackRef.current = videoTrack;
+        }
+        const selectedTracks = [audioTrack, videoTrack].filter((track): track is ILocalAudioTrack | ILocalVideoTrack => Boolean(track));
+        if (selectedTracks.length) await client.publish(selectedTracks);
+        if (videoTrack && localVideoRef.current) videoTrack.play(localVideoRef.current);
 
         setStatus("connected");
         refreshRemoteUsers(client);
@@ -136,18 +147,40 @@ export function AgoraRoom({
 
   const toggleMicrophone = async () => {
     const next = !micEnabled;
-    await audioTrackRef.current?.setEnabled(next);
-    setMicEnabled(next);
-    notify(next ? "Agora microphone enabled." : "Agora microphone muted.");
+    try {
+      if (next && !audioTrackRef.current) {
+        const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
+        const track = await AgoraRTC.createMicrophoneAudioTrack({ AEC: true, ANS: true, AGC: true });
+        await clientRef.current?.publish(track);
+        audioTrackRef.current = track;
+      } else {
+        await audioTrackRef.current?.setEnabled(next);
+      }
+      setMicEnabled(next);
+      notify(next ? "Agora microphone enabled." : "Agora microphone muted.");
+    } catch (deviceError) {
+      notify(deviceError instanceof Error ? deviceError.message : "The microphone could not be enabled.");
+    }
   };
 
   const toggleCamera = async () => {
     const next = !cameraEnabled;
-    await videoTrackRef.current?.setEnabled(next);
-    if (next && localVideoRef.current) videoTrackRef.current?.play(localVideoRef.current);
-    else videoTrackRef.current?.stop();
-    setCameraEnabled(next);
-    notify(next ? "Agora camera enabled." : "Agora camera disabled.");
+    try {
+      if (next && !videoTrackRef.current) {
+        const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
+        const track = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "720p_2" });
+        await clientRef.current?.publish(track);
+        videoTrackRef.current = track;
+      } else {
+        await videoTrackRef.current?.setEnabled(next);
+      }
+      if (next && localVideoRef.current) videoTrackRef.current?.play(localVideoRef.current);
+      else videoTrackRef.current?.stop();
+      setCameraEnabled(next);
+      notify(next ? "Agora camera enabled." : "Agora camera disabled.");
+    } catch (deviceError) {
+      notify(deviceError instanceof Error ? deviceError.message : "The camera could not be enabled.");
+    }
   };
 
   return (

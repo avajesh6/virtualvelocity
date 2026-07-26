@@ -5,9 +5,10 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("ships the two-sided Velocity Venue experience", async () => {
-  const [page, experience, layout] = await Promise.all([
+  const [page, experience, livekitExperience, layout] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/conference-experience.tsx", root), "utf8"),
+    readFile(new URL("app/livekit-experience.tsx", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
   ]);
   assert.match(page, /ConferenceExperience/);
@@ -15,14 +16,15 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(experience, /ProducerView/);
   assert.match(experience, /Rescue Mode/);
   assert.match(experience, /api\/leads/);
-  assert.match(experience, /LiveKitRoom/);
-  assert.match(experience, /VideoConference/);
-  assert.match(experience, /PreJoin/);
-  assert.match(experience, /persistUserChoices=\{false\}/);
-  assert.match(experience, /useConnectionState/);
-  assert.match(experience, /useParticipants/);
+  assert.match(experience, /import\("\.\/livekit-experience"\)/);
+  assert.match(livekitExperience, /LiveKitRoom/);
+  assert.match(livekitExperience, /VideoConference/);
+  assert.match(livekitExperience, /PreJoin/);
+  assert.match(livekitExperience, /persistUserChoices=\{false\}/);
+  assert.match(livekitExperience, /useConnectionState/);
+  assert.match(livekitExperience, /useParticipants/);
   assert.match(experience, /velocity-theme/);
-  assert.match(experience, /Conference invite copied/);
+  assert.match(livekitExperience, /Conference invite copied/);
   assert.match(experience, /Notifications marked as read/);
   assert.match(experience, /Demo connection request sent/);
   assert.match(experience, /sendChatMessage/);
@@ -147,7 +149,8 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(hub, /Demo mutations intentionally stop here/);
   assert.match(hub, /action === "answer-poll"/);
   assert.match(hub, /action === "request-connection"/);
-  assert.match(hub, /role="tab" aria-selected/);
+  assert.match(hub, /role="tab" tabIndex=\{tab === "engage" \? 0 : -1\}/);
+  assert.match(hub, /ArrowRight.*ArrowDown/);
   assert.match(hub, /id="partner-discovery"/);
   assert.match(hub, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
   assert.match(intelligence, /demo_recording_started/);
@@ -156,6 +159,28 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.match(styles, /\.room-grid, \.right-rail \{ grid-template-columns: 1fr; \}/);
   assert.match(styles, /\.attendee-agenda-list/);
+});
+
+test("hardens irreversible operations and external delivery", async () => {
+  const [experience, intelligence, leads, webhook, integrations, schema] = await Promise.all([
+    readFile(new URL("app/conference-experience.tsx", root), "utf8"),
+    readFile(new URL("app/producer-intelligence-center.tsx", root), "utf8"),
+    readFile(new URL("app/api/leads/route.ts", root), "utf8"),
+    readFile(new URL("app/api/livekit-webhook/route.ts", root), "utf8"),
+    readFile(new URL("app/integrations.ts", root), "utf8"),
+    readFile(new URL("db/schema.ts", root), "utf8"),
+  ]);
+  assert.match(experience, /Activate rescue mode\?/);
+  assert.match(experience, /Remove participant/);
+  assert.match(experience, /Advance the live run of show\?/);
+  assert.match(intelligence, /Start recording and live outputs\?/);
+  assert.match(intelligence, /then\(\(ok\) => ok && setTranscriptText/);
+  assert.match(leads, /authenticateRequest\(request\)/);
+  assert.match(leads, /status: 429/);
+  assert.match(webhook, /onConflictDoNothing/);
+  assert.match(webhook, /persistence is temporarily unavailable/);
+  assert.match(integrations, /AbortSignal\.timeout\(8_000\)/);
+  assert.match(schema, /calendarStatus: text\("calendar_status"\)/);
 });
 
 test("escapes portable calendar text and rejects invalid dates", async () => {

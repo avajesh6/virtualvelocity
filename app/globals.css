@@ -43,6 +43,31 @@
 }
 
 /* Media provider selection and Agora room */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 8, 18, .76);
+  backdrop-filter: blur(8px);
+}
+
+.confirmation-dialog {
+  width: min(460px, 100%);
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .45);
+}
+
+.confirmation-dialog h2 { margin: 0 0 10px; font-size: 20px; }
+.confirmation-dialog p { margin: 0; color: var(--text-muted); line-height: 1.55; }
+.confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.danger-button { border: 1px solid #ff5f72; background: #b91c3c; color: white; }
 .media-engine-picker {
   border: 0;
   display: grid;
@@ -179,7 +204,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   font-size: 13px;
   letter-spacing: 0.08em;
   font-weight: 800;
-  cursor: pointer;
   user-select: none;
 }
 .brand > span:last-child {
@@ -1483,6 +1507,32 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .live-header-icon { width: 38px; padding: 0; }
 .leave-room-button { border-color: rgba(255, 108, 85, 0.38); color: #ffad9f; }
 .live-room-conference { min-height: 0; position: relative; }
+.live-captions {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: 92px;
+  width: min(680px, calc(100% - 32px));
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 10px;
+  background: rgba(5, 7, 11, 0.88);
+  backdrop-filter: blur(12px);
+  color: #f8fafc;
+}
+.live-captions p { margin: 4px 0 0; font-size: 13px; line-height: 1.45; }
+.live-captions p strong { margin-right: 7px; color: #67e8f9; }
+.live-captions select {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.live-caption-error { color: #fda4af; }
 .demo-room-shell { grid-template-rows: auto auto 1fr auto; }
 .demo-room-banner {
   padding: 8px 18px;
@@ -1643,8 +1693,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .command-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
+.last-updated { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.confirmation-dialog label { display: block; margin-top: 18px; color: var(--text); font-size: 12px; font-weight: 700; }
+.confirmation-dialog textarea { width: 100%; min-height: 120px; margin-top: 7px; resize: vertical; }
+.demo-resource { border: 0; background: transparent; color: var(--cyan); padding: 0; text-decoration: underline; }
 
 .rescue-banner {
   border: 1px solid rgba(255, 108, 85, 0.4);

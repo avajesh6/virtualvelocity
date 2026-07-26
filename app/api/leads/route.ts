@@ -1,6 +1,9 @@
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { leads } from "../../../db/schema";
 import { dispatchCrmLead } from "../../integrations";
+import { authenticateRequest } from "../../producer-auth";
+import { EVENT_NAME } from "../../venue-config";
 
 type LeadPayload = {
   name?: string;
@@ -12,10 +15,16 @@ type LeadPayload = {
 };
 
 export async function POST(request: Request) {
-  const payload = (await request.json()) as LeadPayload;
-  const required = [payload.name, payload.email, payload.event, payload.booth];
-  if (required.some((value) => !value?.trim())) {
-    return Response.json({ error: "name, email, event and booth are required" }, { status: 400 });
+  const auth = await authenticateRequest(request);
+  if ("error" in auth) return auth.error;
+  let payload: LeadPayload;
+  try {
+    payload = await request.json() as LeadPayload;
+  } catch {
+    return Response.json({ error: "A valid JSON body is required." }, { status: 400 });
+  }
+  if (!payload.booth?.trim()) {
+    return Response.json({ error: "A booth is required." }, { status: 400 });
   }
 
   let persisted = false;
@@ -23,32 +32,54 @@ export async function POST(request: Request) {
     // D1 is the durable lead source. Local previews without a binding remain
     // demonstrable, but the response explicitly reports persisted: false.
     const db = getDb();
+    const recent = await db.select({ createdAt: leads.createdAt }).from(leads).where(and(
+      eq(leads.email, auth.user.email),
+      eq(leads.boothName, payload.booth.trim()),
+    )).orderBy(desc(leads.id)).limit(1);
+    if (recent[0]) {
+      const rawCreatedAt = recent[0].createdAt;
+      const normalizedCreatedAt = rawCreatedAt.includes("T")
+        ? rawCreatedAt
+        : `${rawCreatedAt.replace(" ", "T")}Z`;
+      const createdAt = new Date(normalizedCreatedAt).getTime();
+      if (Number.isFinite(createdAt) && Date.now() - createdAt < 30_000) {
+        return Response.json({ error: "Please wait before submitting this interest again." }, { status: 429 });
+      }
+    }
     await db.insert(leads).values({
-      name: payload.name!.trim(),
-      email: payload.email!.trim(),
+      name: auth.user.displayName,
+      email: auth.user.email,
       company: payload.company?.trim() ?? "",
-      eventName: payload.event!.trim(),
+      eventName: EVENT_NAME,
       boothName: payload.booth!.trim(),
       interest: payload.interest?.trim() ?? "",
     });
     persisted = true;
   } catch {
-    // Local preview remains usable before a D1 migration is applied.
+    // CRM delivery may still succeed when D1 is temporarily unavailable.
   }
 
-  const crm = await dispatchCrmLead({
-    // CRM delivery is independent of D1 persistence so a temporary failure in
-    // either destination does not discard the other successful write.
-    source: "velocity-venue",
-    ...payload,
-    capturedAt: new Date().toISOString(),
-  });
+  let crm: Awaited<ReturnType<typeof dispatchCrmLead>>;
+  try {
+    crm = await dispatchCrmLead({
+      // CRM delivery is independent of D1 persistence so a temporary failure in
+      // either destination does not discard the other successful write.
+      source: "velocity-venue",
+      ...payload,
+      name: auth.user.displayName,
+      email: auth.user.email,
+      event: EVENT_NAME,
+      capturedAt: new Date().toISOString(),
+    });
+  } catch {
+    crm = { configured: true, delivered: false, provider: process.env.CRM_PROVIDER || "generic", slackDelivered: false };
+  }
 
   return Response.json({
-    ok: true,
-    mode: crm.configured ? "connected" : "demo",
+    ok: persisted || crm.delivered,
     persisted,
     routed: crm.delivered,
     provider: crm.provider,
-  }, { status: 201 });
+    slackDelivered: crm.slackDelivered,
+  }, { status: persisted || crm.delivered ? 201 : 503 });
 }

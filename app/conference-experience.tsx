@@ -1,22 +1,12 @@
 "use client";
 
-import {
-  LiveKitRoom,
-  type LocalUserChoices,
-  PreJoin,
-  RoomAudioRenderer,
-  StartAudio,
-  VideoConference,
-  useConnectionState,
-  useParticipants,
-  useTranscriptions,
-} from "@livekit/components-react";
-import "@livekit/components-styles";
+import type { LocalUserChoices } from "@livekit/components-react";
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
   Bell,
+  BookOpen,
   CalendarDays,
   Camera,
   CameraOff,
@@ -25,14 +15,11 @@ import {
   ChevronRight,
   CircleHelp,
   Clock3,
-  Download,
   ExternalLink,
   Gauge,
-  Globe,
   HeartPulse,
   LayoutDashboard,
   LifeBuoy,
-  Link2,
   Map,
   MessageSquareText,
   Mic,
@@ -51,16 +38,16 @@ import {
   Users,
   Video,
   WandSparkles,
-  Wifi,
   X,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "./supabase-client";
 import { VENUE_ROOMS, type VenueRoomId } from "./venue-config";
 import { EventExperienceHub } from "./event-experience-hub";
 import { ProducerIntelligenceCenter } from "./producer-intelligence-center";
 import { AgoraRoom } from "./agora-room";
+import { ConfirmDialog, useAccessibleDialog } from "./accessible-dialog";
 
 type Role = "attendee" | "producer";
 type Theme = "dark" | "light";
@@ -95,6 +82,11 @@ type OperationalEvent = {
   detail: string;
   action?: string;
 };
+
+// Media-provider code is loaded only when an attendee opens a real room. The
+// venue, Demo mode, documentation, and producer dashboard stay lightweight.
+const LiveJoinDialog = lazy(async () => ({ default: (await import("./livekit-experience")).LiveJoinDialog }));
+const ConnectedLiveRoom = lazy(async () => ({ default: (await import("./livekit-experience")).ConnectedLiveRoom }));
 type SupportTicket = {
   id: number;
   requesterName: string;
@@ -570,7 +562,7 @@ export function ConferenceExperience() {
       setNotice("Demo producer console opened with isolated sample data.");
       return;
     }
-    if (!producerUser) {
+    if (!producerUser || !accessToken) {
       setAuthError(null);
       setAuthDialogOpen(true);
       return;
@@ -604,7 +596,7 @@ export function ConferenceExperience() {
     try {
       const response = await fetch("/api/leads", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           name: producerUser.displayName,
           email: producerUser.email,
@@ -614,11 +606,16 @@ export function ConferenceExperience() {
           interest: "Responsible AI field guide",
         }),
       });
-      if (!response.ok) throw new Error("Lead capture failed");
+      const payload = await response.json() as { persisted?: boolean; routed?: boolean; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Lead capture failed");
       setLeadSent(true);
-      setNotice("Interest captured and routed to the event CRM.");
-    } catch {
-      setNotice("We couldn’t route the lead. Please try again.");
+      setNotice(payload.persisted && payload.routed
+        ? "Interest saved and routed to the event CRM."
+        : payload.persisted
+          ? "Interest saved. CRM delivery is not configured or failed."
+          : "Interest routed to the CRM, but local persistence is unavailable.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "We could not save or route the lead. Please try again.");
     } finally {
       setLeadSending(false);
     }
@@ -828,6 +825,7 @@ export function ConferenceExperience() {
           captureLead={captureLead}
           openLiveRoom={openLiveRoom}
           liveConnected={Boolean(liveConnection || agoraConnection)}
+          activeEngine={activeEngine}
           notify={setNotice}
         />
       ) : (
@@ -861,7 +859,7 @@ export function ConferenceExperience() {
       )}
 
       {liveDialogOpen && (
-        <LiveJoinDialog
+        <Suspense fallback={<div className="live-dialog-backdrop"><div className="live-dialog" role="status">Loading secure device lobby…</div></div>}><LiveJoinDialog
           roomTitle={activeRoom.title}
           roomDescription={activeRoom.description}
           attendeeCount={activeRoom.count}
@@ -874,7 +872,7 @@ export function ConferenceExperience() {
           error={liveError}
           close={() => setLiveDialogOpen(false)}
           connect={connectLiveRoom}
-        />
+        /></Suspense>
       )}
 
       {demoRoomOpen && (
@@ -906,14 +904,14 @@ export function ConferenceExperience() {
       )}
 
       {liveConnection && (
-        <ConnectedLiveRoom
+        <Suspense fallback={<div className="live-room-overlay"><div className="live-room-shell" role="status">Loading conference media…</div></div>}><ConnectedLiveRoom
           connection={liveConnection}
           roomTitle={activeRoom.title}
           theme={theme}
           toggleTheme={toggleTheme}
           notify={setNotice}
           leave={() => setLiveConnection(null)}
-        />
+        /></Suspense>
       )}
 
       {notice && <div className="toast" role="status" aria-live="polite"><Check size={17} />{notice}</div>}
@@ -944,6 +942,7 @@ function AttendeeView({
   captureLead,
   openLiveRoom,
   liveConnected,
+  activeEngine,
   notify,
 }: {
   mode: AppMode;
@@ -968,6 +967,7 @@ function AttendeeView({
   captureLead: () => void;
   openLiveRoom: (room?: RoomId) => void;
   liveConnected: boolean;
+  activeEngine: "livekit" | "agora";
   notify: (message: string) => void;
 }) {
   const [chatDraft, setChatDraft] = useState("");
@@ -1056,13 +1056,13 @@ function AttendeeView({
     <div className="attendee-layout">
       <aside className="side-nav">
         <div>
-          <button className={`nav-item ${activeNavigation === "venue" ? "active" : ""}`} aria-current={activeNavigation === "venue" ? "page" : undefined} onClick={() => navigateTo("venue")}><Map size={20} /><span>Venue</span></button>
-          <button className={`nav-item ${activeNavigation === "agenda" ? "active" : ""}`} aria-current={activeNavigation === "agenda" ? "location" : undefined} onClick={() => navigateTo("agenda")}><CalendarDays size={20} /><span>Agenda</span></button>
+          <button title="Venue lobby and rooms" className={`nav-item ${activeNavigation === "venue" ? "active" : ""}`} aria-current={activeNavigation === "venue" ? "page" : undefined} onClick={() => navigateTo("venue")}><Map size={20} /><span>Venue</span></button>
+          <button title="Published event schedule" className={`nav-item ${activeNavigation === "agenda" ? "active" : ""}`} aria-current={activeNavigation === "agenda" ? "location" : undefined} onClick={() => navigateTo("agenda")}><CalendarDays size={20} /><span>Agenda</span></button>
           <button className={`nav-item ${activeNavigation === "chat" ? "active" : ""}`} aria-current={activeNavigation === "chat" ? "location" : undefined} title={mode === "demo" ? "Open demo chat" : liveConnected ? "Open room chat" : "Join the room to use chat"} onClick={() => navigateTo("chat")}><MessageSquareText size={20} /><span>{mode === "live" && !liveConnected ? "Join chat" : "Chat"}</span></button>
-          <button className={`nav-item ${activeNavigation === "expo" ? "active" : ""}`} aria-current={activeNavigation === "expo" ? "location" : undefined} onClick={() => navigateTo("expo")}><Store size={20} /><span>Expo</span></button>
+          <button title="Partner booths and resources" className={`nav-item ${activeNavigation === "expo" ? "active" : ""}`} aria-current={activeNavigation === "expo" ? "location" : undefined} onClick={() => navigateTo("expo")}><Store size={20} /><span>Expo</span></button>
         </div>
         <div>
-          <button className="nav-item" onClick={() => mode === "demo" ? window.location.assign("/docs") : setSupportOpen(true)}><CircleHelp size={20} /><span>Help</span></button>
+          <button className="nav-item" title="Open the venue guide" onClick={() => window.location.assign("/docs")}><CircleHelp size={20} /><span>Help</span></button>
         </div>
       </aside>
 
@@ -1121,8 +1121,8 @@ function AttendeeView({
 
         <div className="conference-capability-strip" aria-label="Conference capabilities">
           <span><Video size={15} /><strong>HD video</strong><small>Adaptive quality</small></span>
-          <span><MonitorUp size={15} /><strong>Screen sharing</strong><small>Present in one click</small></span>
-          <span><MessageSquareText size={15} /><strong>Live chat</strong><small>Built into every room</small></span>
+          <span><MonitorUp size={15} /><strong>Screen sharing</strong><small>{activeEngine === "livekit" ? "Available in LiveKit rooms" : "Choose LiveKit to present"}</small></span>
+          <span><MessageSquareText size={15} /><strong>Live chat</strong><small>{activeEngine === "livekit" ? "Available after joining" : "Choose LiveKit for room chat"}</small></span>
           <span><Settings2 size={15} /><strong>Device control</strong><small>Switch during the call</small></span>
         </div>
 
@@ -1177,7 +1177,7 @@ function AttendeeView({
             <div className="lumen-logo">LU<span>MEN</span></div>
             <h3>Make responsible AI operational.</h3>
             <p>Take the field guide used by product leaders across regulated industries.</p>
-            <button className="secondary-button" onClick={() => window.location.assign("/docs#capabilities")}><Download size={16} />Open venue guide</button>
+            <button className="secondary-button" onClick={() => window.location.assign("/docs#capabilities")}><BookOpen size={16} />Open venue guide</button>
             <button className={`primary-button full ${leadSent ? "success" : ""}`} onClick={captureLead} disabled={leadSending || leadSent}>{leadSent ? <><Check size={16} />Interest captured</> : leadSending ? "Routing…" : <>I’m interested <ExternalLink size={15} /></>}</button>
           </div>
         ) : (
@@ -1257,9 +1257,10 @@ function AuthDialog({
   signIn: () => void;
   signInWithGoogle: () => void;
 }) {
+  const { dialogRef, onKeyDown } = useAccessibleDialog<HTMLFormElement>(close);
   return (
     <div className="live-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-      <form className="live-dialog auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" onSubmit={(event) => { event.preventDefault(); void signIn(); }}>
+      <form ref={dialogRef} onKeyDown={onKeyDown} className="live-dialog auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" onSubmit={(event) => { event.preventDefault(); void signIn(); }}>
         <button className="live-dialog-close" type="button" onClick={close} aria-label="Close sign in"><X size={19} /></button>
         <span className="eyebrow"><ShieldCheck size={14} /> SECURE ACCOUNT ACCESS</span>
         <h2 id="auth-dialog-title">Sign in to Velocity Venue</h2>
@@ -1301,13 +1302,14 @@ function DemoConferenceRoom({
 }) {
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [sharing, setSharing] = useState(false);
+  const { dialogRef, onKeyDown } = useAccessibleDialog<HTMLDivElement>(leave);
 
   // This preview intentionally contains no provider SDK and never calls
   // getUserMedia. It demonstrates room controls without device permissions,
   // tokens, recordings, or participant contact.
   return (
     <div className="live-room-overlay" role="dialog" aria-modal="true" aria-label={`${roomTitle} demo room`}>
-      <div className="live-room-shell demo-room-shell">
+      <div ref={dialogRef} onKeyDown={onKeyDown} className="live-room-shell demo-room-shell">
         <header className="live-room-header">
           <div className="live-room-identity">
             <BrandMark />
@@ -1337,247 +1339,6 @@ function DemoConferenceRoom({
           <button type="button" className={sharing ? "active" : ""} aria-pressed={sharing} onClick={() => { setSharing((value) => !value); notify(sharing ? "Demo screen share stopped." : "Demo screen share started locally."); }}><MonitorUp size={17} />{sharing ? "Stop sharing" : "Share screen"}</button>
         </footer>
       </div>
-    </div>
-  );
-}
-
-function LiveJoinDialog({
-  roomTitle,
-  roomDescription,
-  attendeeCount,
-  defaultName,
-  audioEnabled,
-  videoEnabled,
-  engine,
-  setEngine,
-  joining,
-  error,
-  close,
-  connect,
-}: {
-  roomTitle: string;
-  roomDescription: string;
-  attendeeCount: number;
-  defaultName: string;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-  engine: "livekit" | "agora";
-  setEngine: (engine: "livekit" | "agora") => void;
-  joining: boolean;
-  error: string | null;
-  close: () => void;
-  connect: (choices: LocalUserChoices) => void;
-}) {
-  return (
-    <div className="live-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-      <section className="live-dialog live-prejoin-dialog" role="dialog" aria-modal="true" aria-labelledby="live-dialog-title">
-        <button className="live-dialog-close" type="button" onClick={close} aria-label="Close live room setup"><X size={19} /></button>
-        <div className="prejoin-heading">
-          <span className="eyebrow"><ShieldCheck size={14} /> DEVICE CHECK & LOBBY</span>
-          <h2 id="live-dialog-title">Join {roomTitle}</h2>
-          <p>{roomDescription}</p>
-          <div className="prejoin-room-facts">
-            <span><Users size={15} />{attendeeCount} in the room</span>
-            <span><ShieldCheck size={15} />Encrypted media</span>
-            <span><Settings2 size={15} />Devices remain editable</span>
-          </div>
-          <fieldset className="media-engine-picker" disabled={joining}>
-            <legend>Media provider</legend>
-            <label className={engine === "livekit" ? "active" : ""}>
-              <input type="radio" name="media-engine" value="livekit" checked={engine === "livekit"} onChange={() => setEngine("livekit")} />
-              <span><strong>LiveKit</strong><small>Primary conference infrastructure</small></span>
-            </label>
-            <label className={engine === "agora" ? "active" : ""}>
-              <input type="radio" name="media-engine" value="agora" checked={engine === "agora"} onChange={() => setEngine("agora")} />
-              <span><strong>Agora</strong><small>Alternative SD-RTN infrastructure</small></span>
-            </label>
-          </fieldset>
-        </div>
-        <PreJoin
-          className="velocity-prejoin"
-          defaults={{ username: defaultName, videoEnabled, audioEnabled }}
-          joinLabel={joining ? "Connecting securely…" : "Join conference"}
-          micLabel="Microphone"
-          camLabel="Camera"
-          userLabel="Display name"
-          // The venue's microphone and camera controls are the explicit source
-          // of truth for each lobby opening; selected device IDs still flow into
-          // the active LiveKit connection after the attendee joins.
-          persistUserChoices={false}
-          onValidate={(choices) => Boolean(choices.username.trim()) && !joining}
-          onSubmit={(choices) => void connect(choices)}
-          onError={(joinError) => console.warn("Media preview unavailable", joinError)}
-        />
-        {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Unable to join this room</strong>{error}</span></div>}
-        <button className="live-demo-link" type="button" onClick={close}>Continue exploring the venue</button>
-      </section>
-    </div>
-  );
-}
-
-function ConnectedLiveRoom({
-  connection,
-  roomTitle,
-  theme,
-  toggleTheme,
-  notify,
-  leave,
-}: {
-  connection: LiveConnection;
-  roomTitle: string;
-  theme: Theme;
-  toggleTheme: () => void;
-  notify: (message: string) => void;
-  leave: () => void;
-}) {
-  const [captionsEnabled, setCaptionsEnabled] = useState(true);
-  const copyInvite = async () => {
-    const roomId = VENUE_ROOMS.find((room) => room.roomName === connection.roomName)?.id ?? "stage";
-    const invite = `${window.location.origin}/?room=${roomId}`;
-    try {
-      await navigator.clipboard.writeText(invite);
-      notify("Conference invite copied.");
-    } catch {
-      notify("Copy unavailable. Use the current page URL to invite attendees.");
-    }
-  };
-
-  return (
-    <div className="live-room-overlay" role="dialog" aria-modal="true" aria-label={`${roomTitle} live room`}>
-      <LiveKitRoom
-        className="live-room-shell"
-        token={connection.token}
-        serverUrl={connection.serverUrl}
-        connect
-        video={connection.choices.videoEnabled ? (connection.choices.videoDeviceId ? { deviceId: connection.choices.videoDeviceId } : true) : false}
-        audio={connection.choices.audioEnabled ? (connection.choices.audioDeviceId ? { deviceId: connection.choices.audioDeviceId } : true) : false}
-        onDisconnected={leave}
-        data-lk-theme="default"
-      >
-        <header className="live-room-header">
-          <div className="live-room-identity">
-            <BrandMark />
-            <span className="live-header-divider" />
-            <div><StatusPill>LIVE</StatusPill><strong>{roomTitle}</strong><small>{connection.roomName}</small></div>
-          </div>
-          <ConferenceRoomMeta />
-          <div className="live-room-actions">
-            <button className="live-header-action" type="button" onClick={() => void copyInvite()}><Link2 size={16} />Invite</button>
-            <button className="live-header-action" type="button" aria-pressed={captionsEnabled} onClick={() => setCaptionsEnabled((enabled) => !enabled)}><Captions size={16} />Captions</button>
-            <button className="live-header-icon" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-            <button className="leave-room-button" onClick={leave}><X size={18} />Leave room</button>
-          </div>
-        </header>
-        <div className="live-room-conference">
-          <VideoConference />
-          {captionsEnabled && <LiveCaptions />}
-        </div>
-        <RoomAudioRenderer />
-        <StartAudio label="Enable room audio" />
-      </LiveKitRoom>
-    </div>
-  );
-}
-
-function LiveCaptions() {
-  const transcriptions = useTranscriptions();
-  const visible = transcriptions.slice(-3);
-  const latestText = visible.at(-1)?.text ?? "";
-  const [targetLang, setTargetLang] = useState<"en" | "es" | "fr" | "de" | "ja">("en");
-  const [translatedText, setTranslatedText] = useState<string | null>(null);
-  const [translationError, setTranslationError] = useState<string | null>(null);
-  const [translationProvider, setTranslationProvider] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (targetLang === "en" || !latestText) return;
-
-    let cancelled = false;
-    async function translate() {
-      try {
-        const res = await fetch("/api/translation", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text: latestText, targetLanguage: targetLang }),
-        });
-        const data = (await res.json()) as { translated?: string; provider?: string; error?: string };
-        if (!res.ok || !data.translated) throw new Error(data.error || "Translation is unavailable.");
-        if (!cancelled && data.translated) {
-          setTranslatedText(data.translated);
-          setTranslationProvider(data.provider || "Configured translation service");
-          setTranslationError(null);
-        }
-      } catch (translationFailure) {
-        if (!cancelled) {
-          setTranslatedText(null);
-          setTranslationProvider(null);
-          setTranslationError(translationFailure instanceof Error ? translationFailure.message : "Translation is unavailable.");
-        }
-      }
-    }
-    void translate();
-    return () => {
-      cancelled = true;
-    };
-  }, [latestText, targetLang]);
-
-  return (
-    <div className={`live-captions ${visible.length ? "active" : ""}`} aria-live="polite" aria-label="Live captions">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: "6px" }}>
-        <span style={{ fontSize: "11px", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px", color: "var(--cyan)" }}>
-          <Globe size={13} /> REAL-TIME TRANSLATION{translationProvider ? ` · ${translationProvider}` : ""}
-        </span>
-        <select
-          value={targetLang}
-          onChange={(event) => {
-            setTargetLang(event.target.value as "en" | "es" | "fr" | "de" | "ja");
-            setTranslatedText(null);
-            setTranslationProvider(null);
-            setTranslationError(null);
-          }}
-          style={{
-            background: "rgba(0,0,0,0.5)",
-            border: "1px solid var(--glass-border)",
-            color: "#fff",
-            fontSize: "11px",
-            borderRadius: "6px",
-            padding: "2px 8px",
-            cursor: "pointer"
-          }}
-        >
-          <option value="en">English (Original)</option>
-          <option value="es">Spanish (Español)</option>
-          <option value="fr">French (Français)</option>
-          <option value="de">German (Deutsch)</option>
-          <option value="ja">Japanese (日本語)</option>
-        </select>
-      </div>
-
-      {visible.length
-        ? visible.map((segment, index) => (
-          <p key={`${segment.streamInfo.id}-${index}`}>
-            <strong>{segment.participantInfo.identity}</strong>
-            {targetLang !== "en" && translatedText && index === visible.length - 1 ? translatedText : segment.text}
-          </p>
-        ))
-        : <p><Captions size={15} /> Captions ready. Select target language above for real-time translation.</p>}
-      {translationError && <p className="live-caption-error">Translation unavailable: {translationError}</p>}
-    </div>
-  );
-}
-
-function ConferenceRoomMeta() {
-  // LiveKit's room context is the source of truth during reconnects and as
-  // participants enter or leave; no dashboard counters are simulated here.
-  const connectionState = useConnectionState();
-  const participants = useParticipants();
-  const connected = String(connectionState).toLowerCase() === "connected";
-
-  return (
-    <div className="conference-room-meta" aria-live="polite">
-      <span className={connected ? "connected" : "reconnecting"}><Wifi size={14} />{connected ? "Connected" : String(connectionState)}</span>
-      <span><Users size={14} />{participants.length} {participants.length === 1 ? "participant" : "participants"}</span>
     </div>
   );
 }
@@ -1617,6 +1378,11 @@ function ProducerView({
   const [showFullLog, setShowFullLog] = useState(false);
   const [integrationBusy, setIntegrationBusy] = useState<"announcement" | "calendar" | null>(null);
   const [newRunItem, setNewRunItem] = useState({ scheduledTime: "", title: "", owner: "" });
+  const [operationsUpdatedAt, setOperationsUpdatedAt] = useState<Date | null>(null);
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const [announcementDraft, setAnnouncementDraft] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ title: string; description: string; label: string; danger?: boolean; run: () => Promise<void> | void } | null>(null);
   const openTickets = supportTickets.filter((ticket) => ticket.status !== "resolved");
   const healthRooms = mode === "demo"
     ? demoRooms
@@ -1639,9 +1405,9 @@ function ProducerView({
         { id: -2, requesterName: "David Mills", requesterEmail: "demo@example.com", roomName: "Green room", issue: "Audio echo", status: "open", assignedTo: "", createdAt: new Date().toISOString() },
       ]);
       setOperationsStatus("ready");
+      setOperationsUpdatedAt(new Date());
       return;
     }
-    setOperationsStatus("loading");
     try {
       const response = await fetch("/api/producer/operations", {
         cache: "no-store",
@@ -1657,6 +1423,7 @@ function ProducerView({
       setPersistentEvents(payload.activity ?? []);
       setSupportTickets(payload.supportTickets ?? []);
       setOperationsStatus("ready");
+      setOperationsUpdatedAt(new Date());
     } catch {
       setPersistentRunOfShow([]);
       setPersistentEvents([]);
@@ -1671,7 +1438,6 @@ function ProducerView({
       setParticipantStatus("ready");
       return;
     }
-    setParticipantStatus("loading");
     try {
       const response = await fetch("/api/producer/room?room=velocity-venue-stage", {
         cache: "no-store",
@@ -1695,10 +1461,16 @@ function ProducerView({
       void refreshParticipants();
       void refreshOperations();
     }, 0);
-    return () => window.clearTimeout(timer);
-    // These loaders intentionally run once when the authenticated producer view opens.
+    const participantInterval = window.setInterval(() => void refreshParticipants(), 10_000);
+    const operationsInterval = window.setInterval(() => void refreshOperations(), 15_000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(participantInterval);
+      window.clearInterval(operationsInterval);
+    };
+    // Refresh callbacks intentionally use the current credentials for this view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  }, [mode, accessToken]);
 
   const selectRunItem = async (index: number, item: RunOfShowItem) => {
     // Optimistic state gives the show caller immediate feedback. The following
@@ -1809,34 +1581,38 @@ function ProducerView({
     }
   };
 
-  const sendAnnouncement = async () => {
+  const sendAnnouncement = async (message: string) => {
     if (mode === "demo") {
       notify("Demo announcement sent. No external channels or attendees were contacted.");
+      setAnnouncementOpen(false);
+      setAnnouncementDraft("");
       return;
     }
-    const message = window.prompt("Announcement for all attendees");
-    if (!message?.trim()) return;
+    if (!message.trim()) return;
     setIntegrationBusy("announcement");
-    const persisted = await fetch("/api/producer/operations", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ action: "announce", message: message.trim() }),
-    });
-    if (!persisted.ok) {
-      notify("The announcement could not be published.");
+    try {
+      const persisted = await fetch("/api/producer/operations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ action: "announce", message: message.trim() }),
+      });
+      if (!persisted.ok) throw new Error("The announcement could not be published.");
+      const results = await Promise.all([
+        sendIntegration("slack", message.trim()),
+        sendIntegration("teams", message.trim()),
+      ]);
+      notify(results.some(Boolean) ? "Announcement published and delivered to connected channels." : "Announcement published in the venue. External channels are not configured.");
+      await refreshOperations();
+      setAnnouncementOpen(false);
+      setAnnouncementDraft("");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The announcement could not be published.");
+    } finally {
       setIntegrationBusy(null);
-      return;
     }
-    const results = await Promise.all([
-      sendIntegration("slack", message.trim()),
-      sendIntegration("teams", message.trim()),
-    ]);
-    notify(results.some(Boolean) ? "Announcement published and delivered to connected channels." : "Announcement published in the venue. External channels are not configured.");
-    await refreshOperations();
-    setIntegrationBusy(null);
   };
 
   const syncCalendar = async () => {
@@ -1877,22 +1653,22 @@ function ProducerView({
     <div className="producer-layout">
       <aside className="producer-nav">
         <div className="producer-label">{mode === "demo" ? "PRODUCER · DEMO DATA" : "PRODUCER · LIVE DATA"}</div>
-        <button className={`producer-nav-item ${producerSection === "overview" ? "active" : ""}`} onClick={() => openProducerSection("overview", "producer-overview")}><LayoutDashboard size={18} />Show overview</button>
-        <button className={`producer-nav-item ${producerSection === "run" ? "active" : ""}`} onClick={() => openProducerSection("run", "producer-run-show")}><TimerReset size={18} />Run of show</button>
-        <button className={`producer-nav-item ${producerSection === "rooms" ? "active" : ""}`} onClick={() => openProducerSection("rooms", "producer-rooms")}><Video size={18} />Rooms & stages</button>
-        <button className={`producer-nav-item ${producerSection === "speakers" ? "active" : ""}`} onClick={() => openProducerSection("speakers", "producer-participants")}><Users size={18} />Speakers</button>
-        <button className={`producer-nav-item ${producerSection === "engagement" ? "active" : ""}`} onClick={() => openProducerSection("engagement", "producer-activity")}><MessageSquareText size={18} />Engagement</button>
-        <button className={`producer-nav-item ${producerSection === "data" ? "active" : ""}`} onClick={() => openProducerSection("data", "producer-metrics")}><Gauge size={18} />Event data</button>
-        <button className={`producer-nav-item ${producerSection === "intelligence" ? "active" : ""}`} onClick={() => openProducerSection("intelligence", "producer-intelligence")}><Sparkles size={18} />Intelligence</button>
+        <button aria-current={producerSection === "overview" ? "page" : undefined} className={`producer-nav-item ${producerSection === "overview" ? "active" : ""}`} onClick={() => openProducerSection("overview", "producer-overview")}><LayoutDashboard size={18} />Show overview</button>
+        <button aria-current={producerSection === "run" ? "page" : undefined} className={`producer-nav-item ${producerSection === "run" ? "active" : ""}`} onClick={() => openProducerSection("run", "producer-run-show")}><TimerReset size={18} />Run of show</button>
+        <button aria-current={producerSection === "rooms" ? "page" : undefined} className={`producer-nav-item ${producerSection === "rooms" ? "active" : ""}`} onClick={() => openProducerSection("rooms", "producer-rooms")}><Video size={18} />Rooms & stages</button>
+        <button aria-current={producerSection === "speakers" ? "page" : undefined} className={`producer-nav-item ${producerSection === "speakers" ? "active" : ""}`} onClick={() => openProducerSection("speakers", "producer-participants")}><Users size={18} />Speakers</button>
+        <button aria-current={producerSection === "engagement" ? "page" : undefined} className={`producer-nav-item ${producerSection === "engagement" ? "active" : ""}`} onClick={() => openProducerSection("engagement", "producer-activity")}><MessageSquareText size={18} />Engagement</button>
+        <button aria-current={producerSection === "data" ? "page" : undefined} className={`producer-nav-item ${producerSection === "data" ? "active" : ""}`} onClick={() => openProducerSection("data", "producer-metrics")}><Gauge size={18} />Event data</button>
+        <button aria-current={producerSection === "intelligence" ? "page" : undefined} className={`producer-nav-item ${producerSection === "intelligence" ? "active" : ""}`} onClick={() => openProducerSection("intelligence", "producer-intelligence")}><Sparkles size={18} />Intelligence</button>
         <div className="nav-divider" />
-        <button className={`producer-nav-item ${producerSection === "support" ? "active" : ""}`} onClick={() => openProducerSection("support", "producer-support")}><LifeBuoy size={18} />Support queue <span>{openTickets.length}</span></button>
+        <button aria-current={producerSection === "support" ? "page" : undefined} className={`producer-nav-item ${producerSection === "support" ? "active" : ""}`} onClick={() => openProducerSection("support", "producer-support")}><LifeBuoy size={18} />Support queue <span>{openTickets.length}</span></button>
         <div className="event-health"><div><HeartPulse size={17} /><span>EVENT SERVICES</span></div><strong>{mode === "demo" ? "DEMO" : venueSnapshot?.mediaAvailable && operationsStatus === "ready" ? "READY" : "CHECK"}</strong><small>{mode === "demo" ? "No live systems affected" : venueSnapshot?.mediaAvailable ? operationsStatus === "ready" ? "Media and operations connected" : "Operations data unavailable" : venueSnapshot?.mediaError ?? "Checking services"}</small></div>
       </aside>
 
       <section className="command-content">
         <div className="command-heading scroll-target" id="producer-overview">
           <div><span className="eyebrow"><Radio size={13} /> {mode === "demo" ? "DEMO MODE" : "LIVE OPERATIONS"} · SIGNED IN</span><h1>{greeting}, {producerUser.displayName.split(" ")[0]}.</h1><p>{mode === "demo" ? "Explore the producer workflow without changing live systems." : `${venueSnapshot?.totalParticipants ?? 0} participants are connected across ${venueSnapshot?.activeRooms ?? 0} rooms.`}</p></div>
-          <div className="command-actions"><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void sendAnnouncement()}><Bell size={16} />{integrationBusy === "announcement" ? "Sending…" : "Send announcement"}</button><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void syncCalendar()}><CalendarDays size={15} />{integrationBusy === "calendar" ? "Syncing…" : "Sync calendar"}</button><button className="primary-button" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink size={15} />Open attendee view</button></div>
+          <div className="command-actions"><span className="last-updated" aria-live="polite">{operationsUpdatedAt ? `Updated ${operationsUpdatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Updating…"}</span><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => setAnnouncementOpen(true)}><Bell size={16} />{integrationBusy === "announcement" ? "Sending…" : "Send announcement"}</button><button className="secondary-button" disabled={integrationBusy !== null} onClick={() => void syncCalendar()}><CalendarDays size={15} />{integrationBusy === "calendar" ? "Syncing…" : "Sync calendar"}</button><button className="secondary-button" onClick={() => { void refreshOperations(); void refreshParticipants(); }}><TimerReset size={15} />Refresh</button><button className="primary-button" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink size={15} />Open attendee view</button></div>
         </div>
 
         {rescueState !== "idle" && (
@@ -1919,7 +1695,7 @@ function ProducerView({
               {operationsStatus === "error" && mode === "live" && <p className="empty-state">The persisted schedule is unavailable. No demo schedule is being substituted.</p>}
               {operationsStatus === "ready" && persistentRunOfShow.length === 0 && <p className="empty-state">No agenda items have been published yet.</p>}
               {persistentRunOfShow.map((item, index) => (
-                <button key={item.id ?? item.scheduledTime} className={`ros-item ${item.status === "live" ? "active" : ""} ${item.status === "done" ? "done" : ""}`} onClick={() => void selectRunItem(index, item)}>
+                <button key={item.id ?? item.scheduledTime} className={`ros-item ${item.status === "live" ? "active" : ""} ${item.status === "done" ? "done" : ""}`} onClick={() => item.id ? setPendingAction({ title: "Advance the live run of show?", description: `Make “${item.title}” the current live item and update all surrounding agenda statuses.`, label: "Make item live", run: () => selectRunItem(index, item) }) : void selectRunItem(index, item)}>
                   <span className="ros-time">{item.scheduledTime}</span><span className="ros-line"><i /></span><span className="ros-copy"><strong>{item.title}</strong><small>{item.owner}</small></span><span className="ros-status">{item.status === "done" ? <Check size={14} /> : item.status === "live" ? "LIVE" : item.status === "next" ? "NEXT" : ""}</span>
                 </button>
               ))}
@@ -1940,7 +1716,7 @@ function ProducerView({
             <div className="health-room">
               <div className="health-room-head"><span className="health-icon coral"><Radio size={16} /></span><div><strong>Main Stage</strong><small>{mode === "demo" ? "Demo · 286 attendees" : `${venueSnapshot?.rooms.find((item) => item.id === "stage")?.participantCount ?? 0} live participants`}</small></div><StatusPill tone={mode === "demo" || venueSnapshot?.mediaAvailable ? "healthy" : "warning"}>{mode === "demo" ? "Demo" : venueSnapshot?.mediaAvailable ? "Connected" : "Unavailable"}</StatusPill></div>
               <div className="health-stats"><span><i className={venueSnapshot?.mediaAvailable || mode === "demo" ? "green" : ""} />Media <strong>{mode === "demo" ? "Demo" : venueSnapshot?.mediaAvailable ? "Connected" : "Unavailable"}</strong></span><span>Source <strong>{mode === "demo" ? "Sample" : "LiveKit API"}</strong></span><span>Loaded <strong>{mode === "demo" ? 3 : managedParticipants.length}</strong></span></div>
-              <div className="health-actions"><button onClick={() => { void refreshParticipants(); openProducerSection("speakers", "producer-participants"); }}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={triggerRescue} disabled={rescueState !== "idle" || (mode === "live" && !venueSnapshot?.mediaAvailable)}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
+              <div className="health-actions"><button onClick={() => { void refreshParticipants(); openProducerSection("speakers", "producer-participants"); }}><MonitorUp size={15} />Monitor</button><button className="danger-outline" onClick={() => mode === "demo" ? triggerRescue() : setPendingAction({ title: "Activate rescue mode?", description: "All current Main Stage participants will be moved to the configured backup room. Use this only during an active incident.", label: "Activate rescue", danger: true, run: triggerRescue })} disabled={rescueState !== "idle" || (mode === "live" && !venueSnapshot?.mediaAvailable)}><ShieldCheck size={15} />Activate Rescue Mode</button></div>
               <div className="live-participants scroll-target" id="producer-participants">
                 <div><strong>LIVEKIT PARTICIPANTS</strong><button onClick={refreshParticipants}>Refresh</button></div>
                 {participantStatus === "loading" && <p>Checking the live room…</p>}
@@ -1951,7 +1727,7 @@ function ProducerView({
                     <span className="mini-avatar cyan">{participant.name.slice(0, 2).toUpperCase()}</span>
                     <span><strong>{participant.name}</strong><small>{participant.audioTrackSid ? participant.audioMuted ? "Audio muted" : "Audio live" : "No audio track"}</small></span>
                     <button onClick={() => manageParticipant("mute", participant)} disabled={!participant.audioTrackSid || participant.audioMuted}>Mute</button>
-                    <button className="remove" onClick={() => manageParticipant("remove", participant)}>Remove</button>
+                    <button className="remove" onClick={() => setPendingAction({ title: `Remove ${participant.name}?`, description: "This immediately disconnects the participant from the Main Stage. They may join again if they still have access.", label: "Remove participant", danger: true, run: () => manageParticipant("remove", participant) })}>Remove</button>
                   </div>
                 ))}
               </div>
@@ -1991,6 +1767,37 @@ function ProducerView({
           </section>
         </div>
       </section>
+      {announcementOpen && <AnnouncementDialog value={announcementDraft} busy={integrationBusy === "announcement"} onChange={setAnnouncementDraft} onCancel={() => setAnnouncementOpen(false)} onSubmit={() => void sendAnnouncement(announcementDraft)} />}
+      {pendingAction && <ConfirmDialog
+        title={pendingAction.title}
+        description={pendingAction.description}
+        confirmLabel={pendingAction.label}
+        danger={pendingAction.danger}
+        busy={actionBusy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          setActionBusy(true);
+          Promise.resolve(pendingAction.run()).finally(() => {
+            setActionBusy(false);
+            setPendingAction(null);
+          });
+        }}
+      />}
+    </div>
+  );
+}
+
+function AnnouncementDialog({ value, busy, onChange, onCancel, onSubmit }: { value: string; busy: boolean; onChange: (value: string) => void; onCancel: () => void; onSubmit: () => void }) {
+  const { dialogRef, onKeyDown } = useAccessibleDialog<HTMLFormElement>(onCancel);
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+      <form ref={dialogRef} onKeyDown={onKeyDown} className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="announcement-title" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+        <h2 id="announcement-title">Send venue announcement</h2>
+        <p>Publish an operational update in the venue and deliver it to configured Slack and Teams channels.</p>
+        <label htmlFor="announcement-message">Message</label>
+        <textarea id="announcement-message" autoFocus required minLength={3} maxLength={500} value={value} onChange={(event) => onChange(event.target.value)} />
+        <div className="confirmation-actions"><button type="button" className="secondary-button" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="primary-button" disabled={busy || value.trim().length < 3}>{busy ? "Sending…" : "Publish announcement"}</button></div>
+      </form>
     </div>
   );
 }

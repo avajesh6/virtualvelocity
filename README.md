@@ -42,7 +42,8 @@ permission, issue media tokens, persist records, or call CRM and messaging adapt
    captions, screen-share, and leave controls.
 2. Use **Polls & Q&A** to vote and submit a question. In **Networking**, edit the
    opt-in profile, accept a sample request, schedule an introduction, and download
-   its `.ics` file. Search and export the sample conference memory.
+   its `.ics` file. The facilitated networking timer demonstrates prompts and
+   pacing only; it never starts a call. Search and export the sample conference memory.
 3. Select **Producer demo** without signing in. Exercise Rescue Mode, run-of-show,
    support, recording, poll, transcript, replay, sponsor, and memory controls.
 4. Switch to **Live**. Demo surfaces close and protected producer operations again
@@ -90,7 +91,8 @@ private memory webhook only when transcript processing has been approved.
 
 Agora is an optional alternative media provider. Its token endpoint accepts only
 the four configured venue rooms and returns an explicit `503` until both Agora
-credentials are set. Real-time caption translation likewise remains unavailable
+credentials are set. Agora supplies audio/video media; room chat, screen sharing,
+and LiveKit captions require the LiveKit provider. Real-time caption translation likewise remains unavailable
 until an approved translation webhook is configured; untranslated text is never
 presented as translated output.
 

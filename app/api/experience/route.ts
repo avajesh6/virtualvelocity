@@ -320,7 +320,11 @@ export async function POST(request: Request) {
       });
       if (!result.configured) return Response.json({ error: "The calendar booking adapter is not configured." }, { status: 503 });
       if (!result.delivered) return Response.json({ error: "The calendar provider rejected the introduction." }, { status: 502 });
-      return Response.json({ ok: true });
+      await db.update(connectionRequests).set({
+        startsAt: startsAt.toISOString(),
+        calendarStatus: "delivered",
+      }).where(eq(connectionRequests.id, connection[0].id));
+      return Response.json({ ok: true, startsAt: startsAt.toISOString(), calendarStatus: "delivered" });
     }
 
     if (body.action === "sponsor-interest") {

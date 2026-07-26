@@ -47,6 +47,7 @@ export async function dispatchIntegration(payload: IntegrationPayload) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(requestBody(payload)),
+    signal: AbortSignal.timeout(8_000),
   });
   return { configured: true, delivered: response.ok };
 }
@@ -56,15 +57,21 @@ export async function dispatchCrmLead(payload: Record<string, unknown>) {
   const endpoint = process.env.CRM_WEBHOOK_URL;
   const provider = (process.env.CRM_PROVIDER || "generic").toLowerCase();
   
+  let slackDelivered = false;
   if (process.env.SLACK_WEBHOOK_URL) {
-    void dispatchIntegration({
-      channel: "slack",
-      message: `🎯 Lead Captured: ${payload.name || "Attendee"} (${payload.email || "No email"}) requested info for booth "${payload.booth || "General"}"!`,
-      eventName: String(payload.event || "Velocity Venue"),
-    });
+    try {
+      const slack = await dispatchIntegration({
+        channel: "slack",
+        message: `🎯 Lead Captured: ${payload.name || "Attendee"} (${payload.email || "No email"}) requested info for booth "${payload.booth || "General"}"!`,
+        eventName: String(payload.event || "Velocity Venue"),
+      });
+      slackDelivered = slack.delivered;
+    } catch {
+      // Slack notification failure must not prevent the independent CRM write.
+    }
   }
 
-  if (!endpoint) return { configured: false, delivered: false, provider };
+  if (!endpoint) return { configured: false, delivered: false, provider, slackDelivered };
 
   const body =
     provider === "hubspot"
@@ -82,8 +89,9 @@ export async function dispatchCrmLead(payload: Record<string, unknown>) {
         : {}),
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8_000),
   });
-  return { configured: true, delivered: response.ok, provider };
+  return { configured: true, delivered: response.ok, provider, slackDelivered };
 }
 
 /** Generate a portable iCalendar file for a networking introduction. */

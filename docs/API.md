@@ -2,7 +2,7 @@
 
 All request and response bodies use JSON unless otherwise noted.
 
-## Public endpoints
+## Service and attendee endpoints
 
 ### `POST /api/livekit-token`
 
@@ -50,7 +50,9 @@ It never returns Demo-mode samples.
 
 Receives LiveKit room, participant, track, and Egress webhooks. Requests must
 carry a valid LiveKit signature. Delivery is idempotent using the provider event
-id; retries return success without creating duplicate telemetry.
+id; retries return success without creating duplicate telemetry. Invalid
+signatures return `401`; a verified event that cannot be persisted returns `503`
+so LiveKit can retry it.
 
 ### `POST /api/transcript-ingest`
 
@@ -61,16 +63,23 @@ allowlisted venue rooms, ignores partial hypotheses, and limits each request to
 
 ### `POST /api/leads`
 
-Persists expo interest and optionally forwards it to a CRM adapter.
+Persists expo interest and optionally forwards it to a CRM adapter. A verified
+Supabase bearer token is required; name, email, and event are taken from the
+authenticated account and server configuration rather than trusted from the
+request body.
 
-Required fields: `name`, `email`, `event`, and `booth`.
+Required field: `booth`. `company` and `interest` are optional. Repeating the
+same booth submission within 30 seconds returns `429`.
 
 The response reports:
 
 - `persisted`: the lead was written to D1.
 - `routed`: the CRM accepted the request.
 - `provider`: `generic`, `hubspot`, or `salesforce`.
-- `mode`: `connected` when a CRM endpoint is configured, otherwise `demo`.
+- `slackDelivered`: the optional Slack lead notification was accepted.
+
+The endpoint returns `201` when D1 persistence or CRM routing succeeds and `503`
+when neither destination accepts the lead; it never reports a false success.
 
 ## Authenticated endpoints
 
@@ -109,7 +118,9 @@ matches, and outgoing connection requests.
 
 Authenticated attendee actions include `save-profile`, `ask-question`, `vote`,
 `answer-poll`, `reaction`, `raise-hand`, `request-connection`, and
-`sponsor-interest`. Sponsor sharing requires `consent: true`.
+`respond-connection`, `schedule-connection`, and `sponsor-interest`. Sponsor
+sharing requires `consent: true`. Successful scheduling persists `startsAt` and
+`calendarStatus` on the connection after the calendar adapter accepts it.
 
 ### `GET /api/producer/room?room=<room-name>`
 
@@ -215,5 +226,6 @@ extractive summary without transferring transcript text.
 | `401` | Missing, invalid, or expired Supabase session |
 | `403` | Valid attendee account without producer access |
 | `404` | Requested persistent record does not exist |
+| `429` | A repeated action was rate limited |
 | `502` | Configured external provider failed |
 | `503` | Required service or binding is not configured/available |

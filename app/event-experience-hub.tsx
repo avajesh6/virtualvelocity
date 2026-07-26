@@ -170,6 +170,21 @@ export function EventExperienceHub({
   const [speedActive, setSpeedActive] = useState(false);
   const [speedTime, setSpeedTime] = useState(180);
   const [icebreakerIdx, setIcebreakerIdx] = useState(0);
+  const tabOrder: Tab[] = ["engage", "network", "replay", "access"];
+
+  const handleTabKey = (event: React.KeyboardEvent<HTMLButtonElement>, current: Tab) => {
+    const currentIndex = tabOrder.indexOf(current);
+    const nextIndex = event.key === "Home" ? 0
+      : event.key === "End" ? tabOrder.length - 1
+        : event.key === "ArrowRight" || event.key === "ArrowDown" ? (currentIndex + 1) % tabOrder.length
+          : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (currentIndex - 1 + tabOrder.length) % tabOrder.length
+            : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const next = tabOrder[nextIndex];
+    setTab(next);
+    document.getElementById(`experience-tab-${next}`)?.focus();
+  };
 
   // Speed networking timer countdown
   useEffect(() => {
@@ -372,10 +387,10 @@ export function EventExperienceHub({
         <span className={`experience-source ${mode}`}><Radio size={13} />{mode === "demo" ? "DEMO DATA" : "LIVE DATA"}</span>
       </div>
       <div className="experience-tabs" role="tablist" aria-label="Event experience">
-        <button id="experience-tab-engage" role="tab" aria-selected={tab === "engage"} aria-controls="experience-panel-engage" className={tab === "engage" ? "active" : ""} onClick={() => setTab("engage")}><BarChart3 size={16} />Polls &amp; Q&amp;A</button>
-        <button id="experience-tab-network" role="tab" aria-selected={tab === "network"} aria-controls="experience-panel-network" className={tab === "network" ? "active" : ""} onClick={() => setTab("network")}><Network size={16} />Networking</button>
-        <button id="experience-tab-replay" role="tab" aria-selected={tab === "replay"} aria-controls="experience-panel-replay" className={tab === "replay" ? "active" : ""} onClick={() => setTab("replay")}><Play size={16} />Conference memory</button>
-        <button id="experience-tab-access" role="tab" aria-selected={tab === "access"} aria-controls="experience-panel-access" className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}><Accessibility size={16} />Accessibility</button>
+        <button id="experience-tab-engage" role="tab" tabIndex={tab === "engage" ? 0 : -1} aria-selected={tab === "engage"} aria-controls="experience-panel-engage" className={tab === "engage" ? "active" : ""} onKeyDown={(event) => handleTabKey(event, "engage")} onClick={() => setTab("engage")}><BarChart3 size={16} />Polls &amp; Q&amp;A</button>
+        <button id="experience-tab-network" role="tab" tabIndex={tab === "network" ? 0 : -1} aria-selected={tab === "network"} aria-controls="experience-panel-network" className={tab === "network" ? "active" : ""} onKeyDown={(event) => handleTabKey(event, "network")} onClick={() => setTab("network")}><Network size={16} />Networking</button>
+        <button id="experience-tab-replay" role="tab" tabIndex={tab === "replay" ? 0 : -1} aria-selected={tab === "replay"} aria-controls="experience-panel-replay" className={tab === "replay" ? "active" : ""} onKeyDown={(event) => handleTabKey(event, "replay")} onClick={() => setTab("replay")}><Play size={16} />Conference memory</button>
+        <button id="experience-tab-access" role="tab" tabIndex={tab === "access" ? 0 : -1} aria-selected={tab === "access"} aria-controls="experience-panel-access" className={tab === "access" ? "active" : ""} onKeyDown={(event) => handleTabKey(event, "access")} onClick={() => setTab("access")}><Accessibility size={16} />Accessibility</button>
       </div>
 
       {loading ? <p className="experience-empty">Loading live event experience…</p> : null}
@@ -467,10 +482,11 @@ export function EventExperienceHub({
             {/* Speed Networking Widget */}
             <div className="interaction-card" style={{ borderColor: "rgba(200, 255, 99, 0.4)", background: "rgba(200, 255, 99, 0.04)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: "var(--lime)" }}><Zap size={13} style={{ display: "inline", marginRight: 4 }} />SPEED NETWORKING · 3-MIN LIGHTNING ROUNDS</span>
+                <span style={{ color: "var(--lime)" }}><Zap size={13} style={{ display: "inline", marginRight: 4 }} />FACILITATED NETWORKING · 3-MIN TIMER</span>
                 <span className="status-pill healthy" style={{ fontSize: 8 }}>{speedActive ? `${Math.floor(speedTime / 60)}:${String(speedTime % 60).padStart(2, '0')}` : "PAUSED"}</span>
               </div>
               <h4 style={{ margin: "10px 0 6px" }}>{speedActive && speedMatch ? `Conversation round with ${speedMatch.displayName}` : "Start a timed round with an opt-in match"}</h4>
+              <p className="experience-empty">This timer provides a prompt only; it does not start a call or contact the match automatically.</p>
               {speedActive && (
                 <p style={{ color: "var(--lime)", fontSize: 10, margin: "6px 0", fontWeight: 700 }}>
                   💡 Icebreaker: &ldquo;{icebreakers[icebreakerIdx]}&rdquo;
@@ -549,7 +565,7 @@ export function EventExperienceHub({
                 <div>
                   <h4>{sponsor.name}</h4>
                   <p>{sponsor.description || "Event partner"}</p>
-                  {sponsor.resourceUrl && <a href={sponsor.resourceUrl} target="_blank" rel="noreferrer" onClick={(event) => sponsor.resourceUrl === "#" && event.preventDefault()}>Open resource</a>}
+                  {sponsor.resourceUrl && (sponsor.resourceUrl === "#" ? <button type="button" className="demo-resource" onClick={() => notify("Demo resource preview only. No external page was opened.")}>Preview demo resource</button> : <a href={sponsor.resourceUrl} target="_blank" rel="noreferrer">Open resource</a>)}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <button disabled={busy || (mode === "demo" && demoSponsorOptIns.includes(sponsor.name))} onClick={() => void post({ action: "sponsor-interest", boothName: sponsor.name, consent: true }, `Your details were shared with ${sponsor.name} with consent.`)}>{mode === "demo" && demoSponsorOptIns.includes(sponsor.name) ? "Shared in demo" : "Share details"}</button>
@@ -583,7 +599,7 @@ export function EventExperienceHub({
               <article className="replay-card" key={replay.id}>
                 <span><Play size={16} /></span><div><h4>{replay.title}</h4><p>{replay.summary || "Replay published by the event team."}</p></div>
                 {replay.url
-                  ? <a href={replay.url} target="_blank" rel="noreferrer" onClick={(event) => replay.url === "#" && event.preventDefault()}>Watch</a>
+                  ? replay.url === "#" ? <button type="button" className="demo-resource" onClick={() => notify("Demo replay preview only. No video was opened.")}>Preview demo replay</button> : <a href={replay.url} target="_blank" rel="noreferrer">Watch</a>
                   : <span className="memory-label">Memory</span>}
               </article>
             ))}

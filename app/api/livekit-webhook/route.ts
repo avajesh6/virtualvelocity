@@ -1,4 +1,4 @@
-import { EgressStatus, WebhookReceiver } from "livekit-server-sdk";
+import { EgressStatus, type WebhookEvent, WebhookReceiver } from "livekit-server-sdk";
 import { getDb } from "../../../db";
 import { recordingJobs, telemetryEvents } from "../../../db/schema";
 import { EVENT_NAME } from "../../venue-config";
@@ -11,20 +11,25 @@ export async function POST(request: Request) {
     return Response.json({ error: "LiveKit webhook verification is not configured." }, { status: 503 });
   }
   const body = await request.text();
+  let event: WebhookEvent;
   try {
-    // Signature verification happens before parsing or persistence. LiveKit may
-    // retry delivery, so externalId is unique and duplicate inserts are benign.
-    const event = await new WebhookReceiver(apiKey, apiSecret).receive(
+    // Signature verification is isolated from persistence so infrastructure
+    // failures are never misreported as authentication failures.
+    event = await new WebhookReceiver(apiKey, apiSecret).receive(
       body,
       request.headers.get("authorization") ?? undefined,
     );
+  } catch {
+    return Response.json({ error: "Invalid LiveKit webhook signature." }, { status: 401 });
+  }
+
+  try {
     const roomName = event.room?.name ?? event.egressInfo?.roomName ?? "";
     const participantId = event.participant?.identity ?? "";
     const participantName = event.participant?.name ?? "";
     const externalId = event.id || `${event.event}-${event.createdAt}-${roomName}-${participantId}`;
     const db = getDb();
-    try {
-      await db.insert(telemetryEvents).values({
+    await db.insert(telemetryEvents).values({
         externalId,
         eventName: EVENT_NAME,
         roomName,
@@ -37,10 +42,7 @@ export async function POST(request: Request) {
           ingressId: event.ingressInfo?.ingressId ?? null,
         }),
         occurredAt: new Date(Number(event.createdAt) * 1000).toISOString(),
-      });
-    } catch {
-      // Duplicate deliveries are expected and should still return 200.
-    }
+      }).onConflictDoNothing({ target: telemetryEvents.externalId });
     if (event.egressInfo?.egressId) {
       await db.update(recordingJobs).set({
         status: EgressStatus[event.egressInfo.status] ?? String(event.egressInfo.status),
@@ -50,6 +52,6 @@ export async function POST(request: Request) {
     }
     return Response.json({ ok: true });
   } catch {
-    return Response.json({ error: "Invalid LiveKit webhook signature." }, { status: 401 });
+    return Response.json({ error: "LiveKit webhook persistence is temporarily unavailable." }, { status: 503 });
   }
 }

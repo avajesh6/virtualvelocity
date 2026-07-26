@@ -36,6 +36,8 @@ LiveKit, Agora, recording, webhook, or connector rehearsals.
 13. Verify networking discoverability is opt-in and sponsor lead sharing records explicit consent.
 14. Confirm captions appear from the approved transcription agent and test the chosen caption languages.
 15. Start and stop a rehearsal recording, validate its destination, publish a replay, and generate conference memory.
+16. Confirm keyboard focus stays inside sign-in, device-lobby, announcement, and
+    confirmation dialogs; verify Escape closes them and returns focus to the opener.
 
 ## During an event
 
@@ -47,6 +49,8 @@ LiveKit, Agora, recording, webhook, or connector rehearsals.
 - Monitor Venue Intelligence recommendations alongside LiveKit's current room
   state. Recommendations are operational prompts, not automatic destructive actions.
 - Confirm recording and transcription consent before starting capture.
+- Read and accept the confirmation before participant removal, Rescue Mode,
+  run-of-show advancement, and recording start/stop actions.
 - Close completed questions and polls so attendee controls accurately reflect the moderator state.
 
 ## Rescue Mode
