@@ -30,8 +30,26 @@ npm run dev
 
 Live mode is the default. It never substitutes sample values when a service is
 empty or unavailable. Use the clearly labelled **Demo** switch to explore sample
-attendees, schedules, chat, recovery, tickets, and expo lead capture without
+attendees, schedules, chat, recovery, tickets, media controls, and expo lead capture without
 affecting real systems.
+
+## Demo walkthrough
+
+Demo mode is a browser-local product tour; it does not request camera or microphone
+permission, issue media tokens, persist records, or call CRM and messaging adapters.
+
+1. Select **Demo**, open Main Stage, and exercise the simulated microphone, camera,
+   captions, screen-share, and leave controls.
+2. Use **Polls & Q&A** to vote and submit a question. In **Networking**, edit the
+   opt-in profile, accept a sample request, schedule an introduction, and download
+   its `.ics` file. Search and export the sample conference memory.
+3. Select **Producer demo** without signing in. Exercise Rescue Mode, run-of-show,
+   support, recording, poll, transcript, replay, sponsor, and memory controls.
+4. Switch to **Live**. Demo surfaces close and protected producer operations again
+   require an authorized account.
+
+The persistent header label must read **DEMO DATA · NO LIVE IMPACT** throughout the
+tour. Switching modes resets demo-only state.
 
 ## Connect services
 

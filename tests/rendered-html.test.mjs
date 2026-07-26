@@ -71,8 +71,9 @@ test("keeps third-party credentials server-side", async () => {
 });
 
 test("defines durable lead and incident records", async () => {
-  const [schema, hosting, operationsRoute] = await Promise.all([
+  const [schema, database, hosting, operationsRoute] = await Promise.all([
     readFile(new URL("db/schema.ts", root), "utf8"),
+    readFile(new URL("db/index.ts", root), "utf8"),
     readFile(new URL(".openai/hosting.json", root), "utf8"),
     readFile(new URL("app/api/producer/operations/route.ts", root), "utf8"),
   ]);
@@ -81,6 +82,8 @@ test("defines durable lead and incident records", async () => {
   assert.match(schema, /sqliteTable\("audit_events"/);
   assert.match(schema, /sqliteTable\("run_of_show_items"/);
   assert.match(schema, /sqliteTable\("support_tickets"/);
+  assert.match(database, /await import\("cloudflare:workers"\)/);
+  assert.match(database, /Node production/);
   assert.match(operationsRoute, /authorizeProducerRequest/);
   assert.match(operationsRoute, /set-run-status/);
   assert.match(operationsRoute, /update-support/);
@@ -115,11 +118,45 @@ test("ships operator and maintainer documentation", async () => {
   ]);
   assert.match(productDocs, /Operate the venue with confidence/);
   assert.match(productDocs, /Failure and recovery/);
+  assert.match(productDocs, /Demo walkthrough/);
+  assert.match(productDocs, /Demo mode never requests one/);
   assert.match(readme, /Documentation/);
+  assert.match(readme, /Demo walkthrough/);
   assert.match(architecture, /Trust boundaries/);
   assert.match(api, /Error conventions/);
   assert.match(deployment, /Rollback/);
   assert.match(operations, /Rescue Mode/);
+});
+
+test("keeps demo mode isolated, interactive, and responsive", async () => {
+  const [experience, hub, intelligence, styles] = await Promise.all([
+    readFile(new URL("app/conference-experience.tsx", root), "utf8"),
+    readFile(new URL("app/event-experience-hub.tsx", root), "utf8"),
+    readFile(new URL("app/producer-intelligence-center.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  assert.match(experience, /DemoConferenceRoom/);
+  assert.match(experience, /never calls\s*\n\s*\/\/ getUserMedia/);
+  assert.match(experience, /Demo interest captured locally/);
+  assert.match(experience, /producerUser \?\? demoProducer/);
+  assert.match(experience, /setLiveConnection\(null\)/);
+  assert.match(hub, /Demo mutations intentionally stop here/);
+  assert.match(hub, /action === "answer-poll"/);
+  assert.match(hub, /action === "request-connection"/);
+  assert.match(hub, /role="tab" aria-selected/);
+  assert.match(intelligence, /demo_recording_started/);
+  assert.match(intelligence, /demo_memory_generated/);
+  assert.match(styles, /@media \(max-width: 520px\)/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
+  assert.match(styles, /\.room-grid, \.right-rail \{ grid-template-columns: 1fr; \}/);
+});
+
+test("escapes portable calendar text and rejects invalid dates", async () => {
+  const integrations = await readFile(new URL("app/integrations.ts", root), "utf8");
+  assert.match(integrations, /METHOD:PUBLISH/);
+  assert.match(integrations, /A valid meeting start time is required/);
+  assert.match(integrations, /replace\(\/,\/g, "\\\\,"\)/);
+  assert.match(integrations, /replace\(\/;\/g, "\\\\;"\)/);
 });
 
 test("ships the attendee engagement and conference memory layer", async () => {

@@ -22,7 +22,7 @@ const capabilities = [
   {
     icon: Users,
     title: "Attendee venue",
-    text: "Move between stage, studio, expo, and networking spaces; preview devices; join secure LiveKit rooms; share a screen; chat; and capture expo interest.",
+    text: "Move between stage, studio, expo, and networking spaces; preview devices; join secure LiveKit or Agora rooms; share a screen; chat; and capture expo interest.",
   },
   {
     icon: Radio,
@@ -52,7 +52,7 @@ const capabilities = [
 ];
 
 const workflows = [
-  ["Join an event", "Choose a venue space, select Join live room, preview your camera, choose your microphone and camera, then enter the room."],
+  ["Join an event", "Choose a venue space, select Join live room, choose LiveKit or a configured Agora provider, preview your devices, then enter the room."],
   ["Run a video conference", "Use the participant grid, pin speakers, share your screen, exchange live chat messages, copy an invite link, and monitor connection status from the conference header."],
   ["Choose an appearance", "Use the sun or moon control to switch between light and dark modes. Velocity Venue remembers the preference on this device."],
   ["Choose a data mode", "Live mode uses LiveKit and D1 only. Demo mode is clearly labelled and uses isolated sample data without changing live systems."],
@@ -86,6 +86,7 @@ export default function DocumentationPage() {
         <nav className="docs-toc" aria-label="Documentation sections">
           <a href="#capabilities">Capabilities</a>
           <a href="#workflows">Workflows</a>
+          <a href="#demo">Demo walkthrough</a>
           <a href="#integrations">Integrations</a>
           <a href="#resilience">Resilience</a>
         </nav>
@@ -116,12 +117,30 @@ export default function DocumentationPage() {
         </div>
       </section>
 
+      <section className="docs-section" id="demo">
+        <div className="docs-section-title"><span>03</span><div><small>SAFE PRODUCT TOUR</small><h2>Demo walkthrough</h2></div></div>
+        <div className="docs-copy">
+          <p>Select <strong>Demo</strong> in the venue header. The cyan “DEMO DATA · NO LIVE IMPACT” label confirms that the browser is using an isolated sample workspace.</p>
+          <ol>
+            <li>Open Main Stage and try mute, camera, captions, and screen-share controls in the simulated room. Demo never requests device permission or contacts a media provider.</li>
+            <li>Answer the poll, upvote or submit a question, edit the opt-in profile, accept a connection, schedule an introduction, and export the conference capsule.</li>
+            <li>Select <strong>Producer demo</strong> without signing in. Explore room health, the run of show, Rescue Mode, recording, poll, transcript, replay, sponsor, and conference-memory controls.</li>
+            <li>Switch back to Live. Any open demo media surface closes, local demo changes are discarded, and protected producer actions require authorization.</li>
+          </ol>
+          <p>Sample names, counts, messages, and leads are illustrative. They are never written to D1, sent to a CRM, or attributed to a real attendee.</p>
+        </div>
+      </section>
+
       <section className="docs-section docs-two-column" id="integrations">
         <div>
-          <div className="docs-section-title"><span>03</span><div><small>CONNECTED SERVICES</small><h2>Integration behavior</h2></div></div>
+          <div className="docs-section-title"><span>04</span><div><small>CONNECTED SERVICES</small><h2>Integration behavior</h2></div></div>
           <div className="docs-copy">
             <h3>LiveKit</h3>
             <p>Provides device preview, real-time media, captions, participant administration, signed event webhooks, room recovery, recording, and streaming. Browser clients receive short-lived room tokens; API credentials remain server-side.</p>
+            <h3>Agora</h3>
+            <p>Provides an attendee-selectable alternative media path when configured. The server validates the venue-room allowlist and issues short-lived channel tokens; Demo mode never requests one.</p>
+            <h3>Caption translation</h3>
+            <p>Finalized LiveKit captions can be sent to an approved private translation webhook. The interface labels unavailable translation clearly and never presents untranslated text as translated output.</p>
             <h3>Supabase</h3>
             <p>Authenticates accounts with Google OAuth or email/password. Authorization is enforced again on every protected server endpoint, independent of the sign-in method or what the interface displays.</p>
             <h3>Cloudflare D1</h3>
@@ -146,7 +165,7 @@ export default function DocumentationPage() {
       </section>
 
       <section className="docs-section" id="resilience">
-        <div className="docs-section-title"><span>04</span><div><small>OPERATIONS</small><h2>Failure and recovery</h2></div></div>
+        <div className="docs-section-title"><span>05</span><div><small>OPERATIONS</small><h2>Failure and recovery</h2></div></div>
         <div className="docs-status-grid">
           <article><HeartPulse size={19} /><div><h3>LiveKit unavailable</h3><p>Attendees remain inside the venue shell and receive a clear availability message. Live mode never displays fabricated room counts.</p></div></article>
           <article><Database size={19} /><div><h3>D1 unavailable</h3><p>Live media administration continues. Persistence endpoints return a service-unavailable response so the interface never reports a false save.</p></div></article>

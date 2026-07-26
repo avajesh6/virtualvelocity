@@ -57,7 +57,7 @@ export function ProducerIntelligenceCenter({
           { id: -2, eventType: "track_published", roomName: VENUE_ROOMS[0].roomName, participantName: "Demo speaker", occurredAt: new Date().toISOString() },
         ],
         items: [],
-        recordings: [{ id: -1, egressId: "demo-egress", roomName: VENUE_ROOMS[0].roomName, status: "DEMO_ACTIVE", createdAt: new Date().toISOString() }],
+        recordings: [],
         recommendations: ["Demo insight: the Q&A queue is growing. Bring a top-ranked question to stage.", "Demo insight: Studio One is nearing its planned transition time."],
         recordingConfigured: true,
         streamingConfigured: true,
@@ -86,6 +86,37 @@ export function ProducerIntelligenceCenter({
 
   const post = async (body: Record<string, unknown>, success: string) => {
     if (mode === "demo") {
+      // Producer demo actions mutate only the isolated control-tower snapshot.
+      // This gives evaluators visible feedback without invoking media or webhooks.
+      setData((current) => {
+        if (!current) return current;
+        const action = String(body.action ?? "");
+        const now = new Date().toISOString();
+        const telemetryEvent = (eventType: string) => ({ id: -Date.now(), eventType, roomName: String(body.room ?? VENUE_ROOMS[0].roomName), participantName: "Demo producer", occurredAt: now });
+        if (action === "start-recording") {
+          return { ...current, recordings: [{ id: -Date.now(), egressId: "demo-egress", roomName: String(body.room), status: "DEMO_ACTIVE", createdAt: now }, ...current.recordings], telemetry: [telemetryEvent("demo_recording_started"), ...current.telemetry] };
+        }
+        if (action === "stop-recording") {
+          return { ...current, recordings: current.recordings.map((recording) => recording.egressId === body.egressId ? { ...recording, status: "DEMO_COMPLETE" } : recording), telemetry: [telemetryEvent("demo_recording_stopped"), ...current.telemetry] };
+        }
+        if (action === "create-poll") {
+          return { ...current, metrics: { ...current.metrics, openQuestions: current.metrics.openQuestions + 1 }, items: [...current.items, { id: -Date.now(), kind: "poll", prompt: String(body.prompt), status: "open", responseCount: 0 }], telemetry: [telemetryEvent("demo_poll_published"), ...current.telemetry] };
+        }
+        if (action === "import-transcript") {
+          const count = Array.isArray(body.transcript) ? body.transcript.length : 0;
+          return { ...current, metrics: { ...current.metrics, transcriptSegments: current.metrics.transcriptSegments + count }, telemetry: [telemetryEvent("demo_transcript_imported"), ...current.telemetry] };
+        }
+        if (action === "generate-memory") {
+          return { ...current, recommendations: ["Demo memory generated: trust, evidence, and accountable product decisions were the dominant themes.", ...current.recommendations], telemetry: [telemetryEvent("demo_memory_generated"), ...current.telemetry] };
+        }
+        if (action === "close-item") {
+          return { ...current, items: current.items.map((item) => item.id === Number(body.itemId) ? { ...item, status: "closed" } : item) };
+        }
+        if (action === "publish-replay" || action === "publish-sponsor") {
+          return { ...current, telemetry: [telemetryEvent(action === "publish-replay" ? "demo_replay_published" : "demo_sponsor_published"), ...current.telemetry] };
+        }
+        return current;
+      });
       notify(`Demo: ${success} No live system was changed.`);
       return;
     }

@@ -216,6 +216,12 @@ const demoEvents = [
   { time: "11:19:16", text: "Poll #1 closed · 214 responses", tone: "neutral" },
 ];
 
+const demoProducer: ProducerUser = {
+  displayName: "Demo Producer",
+  email: "demo@velocity.local",
+  role: "producer",
+};
+
 type DisplayRoom = {
   id: RoomId;
   kicker: string;
@@ -281,6 +287,7 @@ export function ConferenceExperience() {
   const [, setActiveRos] = useState(2);
   const [events, setEvents] = useState(demoEvents);
   const [liveDialogOpen, setLiveDialogOpen] = useState(false);
+  const [demoRoomOpen, setDemoRoomOpen] = useState(false);
   const [liveJoining, setLiveJoining] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveConnection, setLiveConnection] = useState<LiveConnection | null>(null);
@@ -537,7 +544,31 @@ export function ConferenceExperience() {
     setNotice("You have signed out.");
   };
 
+  const changeMode = (nextMode: AppMode) => {
+    if (nextMode === mode) return;
+
+    // Mode changes are an explicit trust-boundary change. Tear down transient
+    // media UI so a demo action can never continue against a live provider.
+    setLiveDialogOpen(false);
+    setDemoRoomOpen(false);
+    setLiveConnection(null);
+    setAgoraConnection(null);
+    setLeadSent(false);
+    setMode(nextMode);
+    if (nextMode === "live" && role === "producer" && producerUser?.role !== "producer") {
+      setRole("attendee");
+      setNotice("Live Producer mode requires an authorized producer account.");
+    } else {
+      setNotice(nextMode === "demo" ? "Demo sandbox ready. No live systems will be contacted." : "Live mode enabled. Actions can affect configured services.");
+    }
+  };
+
   const openProducer = () => {
+    if (mode === "demo") {
+      setRole("producer");
+      setNotice("Demo producer console opened with isolated sample data.");
+      return;
+    }
     if (!producerUser) {
       setAuthError(null);
       setAuthDialogOpen(true);
@@ -556,18 +587,28 @@ export function ConferenceExperience() {
   };
 
   const captureLead = async () => {
-    // The lead endpoint reports persistence and routing separately; the
-    // attendee interaction stays simple while the server handles fan-out.
+    // Demo leads remain browser-local. Live leads use the authenticated
+    // attendee identity and let the server own persistence and CRM fan-out.
+    if (mode === "demo") {
+      setLeadSent(true);
+      setNotice("Demo interest captured locally. No lead was stored or routed.");
+      return;
+    }
+    if (!producerUser) {
+      setNotice("Sign in before sharing your details with a partner.");
+      setAuthDialogOpen(true);
+      return;
+    }
     setLeadSending(true);
     try {
       const response = await fetch("/api/leads", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name: "Alex Morgan",
-          email: "alex@northstar.example",
-          company: "Northstar Labs",
-          event: "Global Innovation Summit 2026",
+          name: producerUser.displayName,
+          email: producerUser.email,
+          company: "",
+          event: venueSnapshot?.eventName ?? "Velocity Venue event",
           booth: "Lumen Systems",
           interest: "Responsible AI field guide",
         }),
@@ -627,6 +668,11 @@ export function ConferenceExperience() {
 
   const openLiveRoom = (nextRoom?: RoomId) => {
     if (nextRoom) setRoom(nextRoom);
+    if (mode === "demo") {
+      setDemoRoomOpen(true);
+      setNotice("Demo room opened without requesting camera or microphone access.");
+      return;
+    }
     setLiveError(null);
     setLiveDialogOpen(true);
   };
@@ -705,12 +751,12 @@ export function ConferenceExperience() {
         </div>
         <div className="top-actions">
           <div className="role-switch mode-switch" aria-label="Choose data mode">
-            <button className={mode === "live" ? "active" : ""} onClick={() => setMode("live")}>Live</button>
-            <button className={mode === "demo" ? "active" : ""} onClick={() => setMode("demo")}>Demo</button>
+            <button className={mode === "live" ? "active" : ""} aria-pressed={mode === "live"} onClick={() => changeMode("live")}>Live</button>
+            <button className={mode === "demo" ? "active" : ""} aria-pressed={mode === "demo"} onClick={() => changeMode("demo")}>Demo</button>
           </div>
           <div className="role-switch" aria-label="Switch app role">
-            <button className={role === "attendee" ? "active" : ""} onClick={() => setRole("attendee")}>Attendee</button>
-            <button className={role === "producer" ? "active" : ""} onClick={openProducer} disabled={!authReady}>{producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
+            <button className={role === "attendee" ? "active" : ""} aria-pressed={role === "attendee"} onClick={() => setRole("attendee")}>Attendee</button>
+            <button className={role === "producer" ? "active" : ""} aria-pressed={role === "producer"} onClick={openProducer} disabled={mode === "live" && !authReady}>{mode === "demo" ? "Producer demo" : producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
           </div>
           <button
             className="icon-button theme-toggle"
@@ -794,8 +840,8 @@ export function ConferenceExperience() {
           setActiveRos={setActiveRos}
           events={events}
           notify={setNotice}
-          producerUser={producerUser!}
-          accessToken={accessToken!}
+          producerUser={producerUser ?? demoProducer}
+          accessToken={accessToken ?? ""}
         />
       )}
 
@@ -830,6 +876,19 @@ export function ConferenceExperience() {
         />
       )}
 
+      {demoRoomOpen && (
+        <DemoConferenceRoom
+          roomTitle={activeRoom.title}
+          roomName={VENUE_ROOMS.find((item) => item.id === room)?.roomName ?? VENUE_ROOMS[0].roomName}
+          micOn={micOn}
+          cameraOn={cameraOn}
+          setMicOn={setMicOn}
+          setCameraOn={setCameraOn}
+          notify={setNotice}
+          leave={() => setDemoRoomOpen(false)}
+        />
+      )}
+
       {agoraConnection && (
         <AgoraRoom
           appId={agoraConnection.appId}
@@ -856,7 +915,7 @@ export function ConferenceExperience() {
         />
       )}
 
-      {notice && <div className="toast" role="status"><Check size={17} />{notice}</div>}
+      {notice && <div className="toast" role="status" aria-live="polite"><Check size={17} />{notice}</div>}
     </main>
   );
 }
@@ -1168,6 +1227,67 @@ function AuthDialog({
         <button className="primary-button full" type="submit" disabled={submitting}>{submitting ? "Verifying account…" : "Sign in securely"}<ArrowRight size={16} /></button>
         <div className="auth-note"><ShieldCheck size={14} />Authentication is handled by Supabase. Google and password credentials are never stored by this app.</div>
       </form>
+    </div>
+  );
+}
+
+function DemoConferenceRoom({
+  roomTitle,
+  roomName,
+  micOn,
+  cameraOn,
+  setMicOn,
+  setCameraOn,
+  notify,
+  leave,
+}: {
+  roomTitle: string;
+  roomName: string;
+  micOn: boolean;
+  cameraOn: boolean;
+  setMicOn: (enabled: boolean) => void;
+  setCameraOn: (enabled: boolean) => void;
+  notify: (message: string) => void;
+  leave: () => void;
+}) {
+  const [captionsEnabled, setCaptionsEnabled] = useState(true);
+  const [sharing, setSharing] = useState(false);
+
+  // This preview intentionally contains no provider SDK and never calls
+  // getUserMedia. It demonstrates room controls without device permissions,
+  // tokens, recordings, or participant contact.
+  return (
+    <div className="live-room-overlay" role="dialog" aria-modal="true" aria-label={`${roomTitle} demo room`}>
+      <div className="live-room-shell demo-room-shell">
+        <header className="live-room-header">
+          <div className="live-room-identity">
+            <BrandMark />
+            <span className="live-header-divider" />
+            <div><StatusPill tone="healthy">DEMO</StatusPill><strong>{roomTitle}</strong><small>{roomName}</small></div>
+          </div>
+          <div className="conference-room-meta"><span className="connected"><ShieldCheck size={14} />Sandboxed</span><span><Users size={14} />4 sample participants</span></div>
+          <div className="live-room-actions">
+            <button className="live-header-action" type="button" aria-pressed={captionsEnabled} onClick={() => setCaptionsEnabled((enabled) => !enabled)}><Captions size={16} />Captions</button>
+            <button className="leave-room-button" type="button" onClick={leave}><X size={18} />Leave demo</button>
+          </div>
+        </header>
+        <div className="demo-room-banner"><ShieldCheck size={15} />DEMO ROOM · NO CAMERA, MICROPHONE, RECORDING, OR NETWORK ACCESS</div>
+        <div className="demo-room-grid" aria-label="Sample participant layout">
+          {demoPeople.map((person, index) => (
+            <article className={`demo-participant ${person.color}`} key={person.name}>
+              <span>{person.initials}</span><div><strong>{person.name}</strong><small>{person.role}</small></div>
+              {index === 0 && <i>Speaking</i>}
+            </article>
+          ))}
+          <article className="demo-participant you"><span>YOU</span><div><strong>You</strong><small>{cameraOn ? "Camera preview simulated" : "Camera off"}</small></div></article>
+        </div>
+        {captionsEnabled && <div className="demo-caption" aria-live="polite"><strong>Maya Chen</strong> Trust becomes real when every product decision leaves useful evidence.</div>}
+        <footer className="demo-room-controls" aria-label="Demo room controls">
+          <button type="button" className={micOn ? "active" : ""} aria-pressed={micOn} onClick={() => setMicOn(!micOn)}>{micOn ? <Mic size={17} /> : <MicOff size={17} />}{micOn ? "Mute" : "Unmute"}</button>
+          <button type="button" className={cameraOn ? "active" : ""} aria-pressed={cameraOn} onClick={() => setCameraOn(!cameraOn)}>{cameraOn ? <Camera size={17} /> : <CameraOff size={17} />}{cameraOn ? "Camera off" : "Camera on"}</button>
+          <button type="button" className={sharing ? "active" : ""} aria-pressed={sharing} onClick={() => { setSharing((value) => !value); notify(sharing ? "Demo screen share stopped." : "Demo screen share started locally."); }}><MonitorUp size={17} />{sharing ? "Stop sharing" : "Share screen"}</button>
+        </footer>
+      </div>
     </div>
   );
 }

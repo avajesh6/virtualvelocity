@@ -51,9 +51,7 @@ export async function dispatchIntegration(payload: IntegrationPayload) {
   return { configured: true, delivered: response.ok };
 }
 
-/**
- * Lead capture webhook dispatcher with CRM support.
- */
+/** Maps the venue lead shape to the configured CRM without exposing credentials. */
 export async function dispatchCrmLead(payload: Record<string, unknown>) {
   const endpoint = process.env.CRM_WEBHOOK_URL;
   const provider = (process.env.CRM_PROVIDER || "generic").toLowerCase();
@@ -88,32 +86,7 @@ export async function dispatchCrmLead(payload: Record<string, unknown>) {
   return { configured: true, delivered: response.ok, provider };
 }
 
-/**
- * ==============================================================================
- * TODO / FUTURE INTEGRATIONS PLACEHOLDERS & ARCHITECTURE DOCUMENTATION
- * ==============================================================================
- * 
- * 1. HUBSPOT & SALESFORCE ADVANCED SYNC (TODO - Phase 2):
- *    - Automatically sync attendee engagement scores (poll votes, session watch time).
- *    - Trigger automated post-event email nurturing sequences in HubSpot Workflow.
- * 
- * 2. MARKETO & ZAPIER NATIVE ACTION WEBHOOKS (TODO - Phase 2):
- *    - Real-time event check-in webhooks for instant badge scanning and virtual attendance tracking.
- * 
- * 3. SPATIAL / PROXIMITY NETWORKING ENGINE (TODO - Phase 3):
- *    - Integrate Supabase Realtime / Liveblocks multi-user canvas coordinate synchronization
- *    - Dynamically calculate 2D Euclidean distance between avatar positions (x, y) to adjust LiveKit / Agora volume.
- */
-export const CRM_INTEGRATIONS_ROADMAP = [
-  { provider: "HubSpot", status: "TODO / Architecture Defined", capabilities: ["Contact Sync", "Timeline Events", "Deal Creation"] },
-  { provider: "Salesforce CRM", status: "TODO / Architecture Defined", capabilities: ["Lead Scoring", "Campaign Member Status", "Task Allocation"] },
-  { provider: "Marketo Engage", status: "TODO / Architecture Defined", capabilities: ["Program Member Update", "Custom Activity Stream"] },
-  { provider: "Zapier & Make.com", status: "Active (Generic Webhooks)", capabilities: ["Any 6000+ app connection via Webhooks"] },
-];
-
-/**
- * Generate iCalendar (.ics) content for networking 1-on-1 meetings
- */
+/** Generate a portable iCalendar file for a networking introduction. */
 export function generateIcsContent({
   title,
   description,
@@ -126,24 +99,32 @@ export function generateIcsContent({
   durationMinutes?: number;
 }): string {
   const startDate = new Date(startsAt);
+  if (!Number.isFinite(startDate.getTime())) throw new Error("A valid meeting start time is required.");
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) throw new Error("Meeting duration must be positive.");
   const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
   
   const formatDate = (date: Date) =>
     date.toISOString().replace(/-|:|\.\d+/g, "");
+  // RFC 5545 text fields reserve backslash, comma, semicolon, and newlines.
+  const escapeText = (value: string) => value
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
 
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Velocity Venue//Networking Calendar 1.0//EN",
     "CALSCALE:GREGORIAN",
-    "METHOD:REQUEST",
+    "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:velocity-${Date.now()}@virtualvelocity.com`,
     `DTSTAMP:${formatDate(new Date())}`,
     `DTSTART:${formatDate(startDate)}`,
     `DTEND:${formatDate(endDate)}`,
-    `SUMMARY:${title}`,
-    `DESCRIPTION:${description.replace(/\n/g, "\\n")}`,
+    `SUMMARY:${escapeText(title)}`,
+    `DESCRIPTION:${escapeText(description)}`,
     "STATUS:CONFIRMED",
     "END:VEVENT",
     "END:VCALENDAR",

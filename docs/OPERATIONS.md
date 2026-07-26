@@ -1,5 +1,21 @@
 # Producer operations runbook
 
+## Safe demo and rehearsal
+
+Use Demo mode for product tours and operator orientation. It is intentionally
+browser-local: room controls do not request device access, producer actions do not
+call provider APIs, and attendee interactions do not create records or leads.
+
+1. Confirm the header says `DEMO DATA · NO LIVE IMPACT`.
+2. Open the attendee demo room and test its simulated media controls.
+3. Open `Producer demo` without an account and exercise the run of show, Rescue
+   Mode, recording, poll, transcript, replay, sponsor, and memory controls.
+4. Switch back to Live and confirm the demo room closes and Producer access again
+   requires authorization.
+
+Use a separate non-production Live environment for actual camera, microphone,
+LiveKit, Agora, recording, webhook, or connector rehearsals.
+
 ## Before an event
 
 1. Confirm the attendee venue loads from the production URL.

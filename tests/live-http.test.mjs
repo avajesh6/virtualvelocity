@@ -10,11 +10,21 @@ test("serves the attendee experience", async () => {
 });
 
 test("rejects invalid and unauthorized API requests safely", async () => {
-  const [token, operations, integrations, lead] = await Promise.all([
+  const [token, agoraToken, translation, operations, integrations, lead] = await Promise.all([
     fetch(`${baseUrl}/api/livekit-token`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ identity: "", room: "not-a-room" }),
+    }),
+    fetch(`${baseUrl}/api/agora-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ channelName: "not-a-room" }),
+    }),
+    fetch(`${baseUrl}/api/translation`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "Hello", targetLanguage: "unsupported" }),
     }),
     fetch(`${baseUrl}/api/producer/operations`),
     fetch(`${baseUrl}/api/producer/integrations`, {
@@ -29,6 +39,8 @@ test("rejects invalid and unauthorized API requests safely", async () => {
     }),
   ]);
   assert.equal(token.status, 400);
+  assert.equal(agoraToken.status, 400);
+  assert.equal(translation.status, 400);
   assert.equal(operations.status, 401);
   assert.equal(integrations.status, 401);
   assert.equal(lead.status, 400);

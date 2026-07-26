@@ -117,7 +117,10 @@ const demoData: ExperienceData = {
     { userId: "demo-noor", displayName: "Noor Patel", company: "Arcline", jobTitle: "AI governance lead", sharedInterests: ["Responsible AI"] },
     { userId: "demo-jonas", displayName: "Jonas Weber", company: "Common Ground", jobTitle: "Product director", sharedInterests: ["Product strategy"] },
   ],
-  connections: [],
+  connections: [
+    { id: -1, recipientId: "demo-self", requesterName: "Priya Shah", direction: "incoming", status: "pending" },
+    { id: -2, recipientId: "demo-jonas", recipientName: "Jonas Weber", direction: "outgoing", status: "accepted" },
+  ],
   replays: [{ id: -1, title: "Opening keynote", url: "#", summary: "A practical framework for building trustworthy AI products.", status: "published" }],
   transcripts: [
     { id: -1, speakerName: "Maya Chen", language: "en", text: "Trust is a product behavior, not a launch message." },
@@ -125,6 +128,8 @@ const demoData: ExperienceData = {
   ],
   sponsors: [{ id: -1, name: "Lumen Systems", description: "Operational tools for responsible AI teams.", resourceUrl: "#" }],
 };
+
+const createDemoData = () => structuredClone(demoData);
 
 export function EventExperienceHub({
   mode,
@@ -142,7 +147,7 @@ export function EventExperienceHub({
   notify: (message: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("engage");
-  const [data, setData] = useState<ExperienceData | null>(mode === "demo" ? demoData : null);
+  const [data, setData] = useState<ExperienceData | null>(mode === "demo" ? createDemoData() : null);
   const [loading, setLoading] = useState(mode === "live");
   const [busy, setBusy] = useState(false);
   const [question, setQuestion] = useState("");
@@ -157,6 +162,7 @@ export function EventExperienceHub({
   const [interestDraft, setInterestDraft] = useState("");
   const [transcriptQuery, setTranscriptQuery] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
+  const [demoSponsorOptIns, setDemoSponsorOptIns] = useState<string[]>([]);
   
   // Speed networking state
   const [speedActive, setSpeedActive] = useState(false);
@@ -181,8 +187,10 @@ export function EventExperienceHub({
 
   const refresh = useCallback(async () => {
     if (mode === "demo") {
-      setData(demoData);
-      setProfile(demoData.profile!);
+      const nextDemoData = createDemoData();
+      setData(nextDemoData);
+      setProfile(nextDemoData.profile!);
+      setDemoSponsorOptIns([]);
       setLoading(false);
       return;
     }
@@ -209,6 +217,55 @@ export function EventExperienceHub({
 
   const post = async (body: Record<string, unknown>, success: string) => {
     if (mode === "demo") {
+      // Demo mutations intentionally stop here: they update the browser state
+      // that powers the visible sandbox, never an API, identity, or connector.
+      setData((current) => {
+        if (!current) return current;
+        const action = String(body.action ?? "");
+        if (action === "answer-poll") {
+          const itemId = Number(body.itemId);
+          const response = String(body.response ?? "");
+          return {
+            ...current,
+            items: current.items.map((item) => {
+              if (item.id !== itemId || item.kind !== "poll") return item;
+              const results = { ...item.results };
+              if (item.userResponse && item.userResponse !== response) results[item.userResponse] = Math.max(0, (results[item.userResponse] ?? 1) - 1);
+              if (item.userResponse !== response) results[response] = (results[response] ?? 0) + 1;
+              return { ...item, results, userResponse: response };
+            }),
+          };
+        }
+        if (action === "vote") {
+          const itemId = Number(body.itemId);
+          return { ...current, items: current.items.map((item) => item.id === itemId && !item.userResponse ? { ...item, results: { ...item.results, upvote: (item.results.upvote ?? 0) + 1 }, userResponse: "upvote" } : item) };
+        }
+        if (action === "ask-question") {
+          return { ...current, items: [...current.items, { id: -Date.now(), roomName: String(body.room), kind: "question", authorName: "You", prompt: String(body.prompt), options: [], results: { upvote: 0 }, userResponse: null, status: "open" }] };
+        }
+        if (action === "save-profile") {
+          const nextProfile: Profile = {
+            company: String(body.company ?? ""),
+            jobTitle: String(body.jobTitle ?? ""),
+            interests: Array.isArray(body.interests) ? body.interests.map(String) : [],
+            discoverable: Boolean(body.discoverable),
+            captionLanguage: String(body.captionLanguage ?? "en"),
+            reducedData: Boolean(body.reducedData),
+          };
+          return { ...current, profile: nextProfile };
+        }
+        if (action === "request-connection") {
+          return { ...current, connections: [...current.connections, { id: -Date.now(), recipientId: String(body.recipientId), recipientName: String(body.recipientName), direction: "outgoing", status: "pending" }] };
+        }
+        if (action === "respond-connection") {
+          return { ...current, connections: current.connections.map((connection) => connection.id === Number(body.connectionId) ? { ...connection, status: String(body.status) } : connection) };
+        }
+        if (action === "schedule-connection") {
+          return { ...current, connections: current.connections.map((connection) => connection.id === Number(body.connectionId) ? { ...connection, startsAt: String(body.startsAt) } : connection) };
+        }
+        return current;
+      });
+      if (body.action === "sponsor-interest") setDemoSponsorOptIns((current) => [...new Set([...current, String(body.boothName)])]);
       notify(`Demo: ${success} No real attendee or integration was contacted.`);
       return true;
     }
@@ -299,16 +356,16 @@ export function EventExperienceHub({
         <span className={`experience-source ${mode}`}><Radio size={13} />{mode === "demo" ? "DEMO DATA" : "LIVE DATA"}</span>
       </div>
       <div className="experience-tabs" role="tablist" aria-label="Event experience">
-        <button className={tab === "engage" ? "active" : ""} onClick={() => setTab("engage")}><BarChart3 size={16} />Polls &amp; Q&amp;A</button>
-        <button className={tab === "network" ? "active" : ""} onClick={() => setTab("network")}><Network size={16} />Networking</button>
-        <button className={tab === "replay" ? "active" : ""} onClick={() => setTab("replay")}><Play size={16} />Conference memory</button>
-        <button className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}><Accessibility size={16} />Accessibility</button>
+        <button id="experience-tab-engage" role="tab" aria-selected={tab === "engage"} aria-controls="experience-panel-engage" className={tab === "engage" ? "active" : ""} onClick={() => setTab("engage")}><BarChart3 size={16} />Polls &amp; Q&amp;A</button>
+        <button id="experience-tab-network" role="tab" aria-selected={tab === "network"} aria-controls="experience-panel-network" className={tab === "network" ? "active" : ""} onClick={() => setTab("network")}><Network size={16} />Networking</button>
+        <button id="experience-tab-replay" role="tab" aria-selected={tab === "replay"} aria-controls="experience-panel-replay" className={tab === "replay" ? "active" : ""} onClick={() => setTab("replay")}><Play size={16} />Conference memory</button>
+        <button id="experience-tab-access" role="tab" aria-selected={tab === "access"} aria-controls="experience-panel-access" className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}><Accessibility size={16} />Accessibility</button>
       </div>
 
       {loading ? <p className="experience-empty">Loading live event experience…</p> : null}
 
       {!loading && tab === "engage" && (
-        <div className="experience-grid">
+        <div className="experience-grid" id="experience-panel-engage" role="tabpanel" aria-labelledby="experience-tab-engage">
           <div className="experience-list">
             {!items.length && <p className="experience-empty">No live polls or audience questions in this room yet.</p>}
             {items.map((item) => (
@@ -367,7 +424,7 @@ export function EventExperienceHub({
       )}
 
       {!loading && tab === "network" && (
-        <div className="experience-grid">
+        <div className="experience-grid" id="experience-panel-network" role="tabpanel" aria-labelledby="experience-tab-network">
           <form className="experience-form profile-form" onSubmit={(event) => {
             event.preventDefault();
             void post({ action: "save-profile", ...profile }, "Your networking preferences were saved.");
@@ -479,7 +536,7 @@ export function EventExperienceHub({
                   {sponsor.resourceUrl && <a href={sponsor.resourceUrl} target="_blank" rel="noreferrer" onClick={(event) => sponsor.resourceUrl === "#" && event.preventDefault()}>Open resource</a>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <button disabled={busy} onClick={() => void post({ action: "sponsor-interest", boothName: sponsor.name, consent: true }, `Your details were shared with ${sponsor.name} with consent.`)}>Share details</button>
+                  <button disabled={busy || (mode === "demo" && demoSponsorOptIns.includes(sponsor.name))} onClick={() => void post({ action: "sponsor-interest", boothName: sponsor.name, consent: true }, `Your details were shared with ${sponsor.name} with consent.`)}>{mode === "demo" && demoSponsorOptIns.includes(sponsor.name) ? "Shared in demo" : "Share details"}</button>
                 </div>
               </article>
             ))}
@@ -488,7 +545,7 @@ export function EventExperienceHub({
       )}
 
       {!loading && tab === "replay" && (
-        <div className="memory-grid">
+        <div className="memory-grid" id="experience-panel-replay" role="tabpanel" aria-labelledby="experience-tab-replay">
           <div className="experience-list">
             <div className="interaction-card" style={{ borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.05)" }}>
               <span style={{ color: "var(--violet)" }}><Sparkles size={13} style={{ display: "inline", marginRight: 4 }} />CONFERENCE CAPSULE EXPORT</span>
@@ -527,7 +584,7 @@ export function EventExperienceHub({
       )}
 
       {!loading && tab === "access" && (
-        <form className="accessibility-panel" onSubmit={(event) => {
+        <form className="accessibility-panel" id="experience-panel-access" role="tabpanel" aria-labelledby="experience-tab-access" onSubmit={(event) => {
           event.preventDefault();
           window.localStorage.setItem("velocity-reduced-data", String(profile.reducedData));
           void post({ action: "save-profile", ...profile }, "Accessibility preferences were saved.");
