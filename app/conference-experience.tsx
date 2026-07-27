@@ -272,6 +272,7 @@ export function ConferenceExperience() {
   const [cameraOn, setCameraOn] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [mobileSessionOpen, setMobileSessionOpen] = useState(false);
   const [notificationsUnread, setNotificationsUnread] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [leadSent, setLeadSent] = useState(false);
@@ -748,13 +749,15 @@ export function ConferenceExperience() {
           <small>{mode === "demo" ? "DEMO DATA · NO LIVE IMPACT" : venueStatus === "ready" ? "LIVE DATA" : venueStatus.toUpperCase()}</small>
         </div>
         <div className="top-actions">
-          <div className="role-switch mode-switch" aria-label="Choose data mode">
-            <button className={mode === "live" ? "active" : ""} aria-pressed={mode === "live"} onClick={() => changeMode("live")}>Live</button>
-            <button className={mode === "demo" ? "active" : ""} aria-pressed={mode === "demo"} onClick={() => changeMode("demo")}>Demo</button>
-          </div>
-          <div className="role-switch" aria-label="Switch app role">
-            <button className={role === "attendee" ? "active" : ""} aria-pressed={role === "attendee"} onClick={() => setRole("attendee")}>Attendee</button>
-            <button className={role === "producer" ? "active" : ""} aria-pressed={role === "producer"} onClick={openProducer} disabled={mode === "live" && !authReady}>{mode === "demo" ? "Producer demo" : producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
+          <div className="desktop-session-controls">
+            <div className="role-switch mode-switch" aria-label="Choose data mode">
+              <button className={mode === "live" ? "active" : ""} aria-pressed={mode === "live"} onClick={() => changeMode("live")}>Live</button>
+              <button className={mode === "demo" ? "active" : ""} aria-pressed={mode === "demo"} onClick={() => changeMode("demo")}>Demo</button>
+            </div>
+            <div className="role-switch" aria-label="Switch app role">
+              <button className={role === "attendee" ? "active" : ""} aria-pressed={role === "attendee"} onClick={() => setRole("attendee")}>Attendee</button>
+              <button className={role === "producer" ? "active" : ""} aria-pressed={role === "producer"} onClick={openProducer} disabled={mode === "live" && !authReady}>{mode === "demo" ? "Producer demo" : producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
+            </div>
           </div>
           <button
             className="icon-button theme-toggle"
@@ -798,6 +801,21 @@ export function ConferenceExperience() {
             )}
           </div>
           {producerUser ? <button className="profile-button" onClick={signOut} aria-label="Sign out" title={`Signed in as ${producerUser.email}. Click to sign out.`}>{producerUser.displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</button> : <button className="profile-button" onClick={() => setAuthDialogOpen(true)} aria-label="Sign in"><Users size={15} /></button>}
+          <div className="mobile-session-menu">
+            <button className="icon-button" type="button" aria-label="Open event and role options" aria-expanded={mobileSessionOpen} aria-controls="mobile-session-panel" onClick={() => setMobileSessionOpen((open) => !open)}><MoreHorizontal size={18} /></button>
+            {mobileSessionOpen && <div className="mobile-session-panel" id="mobile-session-panel">
+              <span>Event data</span>
+              <div className="role-switch mode-switch" aria-label="Choose mobile data mode">
+                <button className={mode === "live" ? "active" : ""} aria-pressed={mode === "live"} onClick={() => { changeMode("live"); setMobileSessionOpen(false); }}>Live</button>
+                <button className={mode === "demo" ? "active" : ""} aria-pressed={mode === "demo"} onClick={() => { changeMode("demo"); setMobileSessionOpen(false); }}>Demo</button>
+              </div>
+              <span>Experience</span>
+              <div className="role-switch" aria-label="Switch mobile app role">
+                <button className={role === "attendee" ? "active" : ""} aria-pressed={role === "attendee"} onClick={() => { setRole("attendee"); setMobileSessionOpen(false); }}>Attendee</button>
+                <button className={role === "producer" ? "active" : ""} aria-pressed={role === "producer"} onClick={() => { setMobileSessionOpen(false); openProducer(); }} disabled={mode === "live" && !authReady}>{mode === "demo" ? "Producer demo" : producerUser?.role === "producer" ? "Producer" : "Producer sign in"}</button>
+              </div>
+            </div>}
+          </div>
         </div>
       </header>
 
@@ -1078,7 +1096,7 @@ function AttendeeView({
 
         <section className="live-feature">
           <div className="feature-copy">
-            <StatusPill>{mode === "demo" ? "DEMO · MAIN STAGE" : stageCount > 0 ? "LIVE · MAIN STAGE" : venueSnapshot?.mediaAvailable ? "READY · MAIN STAGE" : "MAIN STAGE UNAVAILABLE"}</StatusPill>
+            <StatusPill tone={mode === "demo" ? "demo" : stageCount > 0 ? "live" : venueSnapshot?.mediaAvailable ? "ready" : "unavailable"}>{mode === "demo" ? "DEMO · MAIN STAGE" : stageCount > 0 ? "LIVE · MAIN STAGE" : venueSnapshot?.mediaAvailable ? "READY · MAIN STAGE" : "MAIN STAGE UNAVAILABLE"}</StatusPill>
             <h2>{mode === "demo" ? <>Building trust in<br />an AI-first world</> : liveItem?.title ?? "Main stage is ready"}</h2>
             <p>{mode === "demo" ? "Maya Chen, Elias Brooks and Sofia Alvarez unpack responsible innovation." : liveItem ? `${liveItem.owner} · scheduled ${liveItem.scheduledTime}` : "No live agenda item has been started by a producer."}</p>
             <div className="speaker-row">{mode === "demo" && <AvatarStack />}<span>{mode === "demo" ? "3 speakers · 286 watching" : `${stageCount} in the room`}</span></div>
@@ -1090,9 +1108,9 @@ function AttendeeView({
                 <div className={`speaker-portrait ${person.color}`}>{person.initials}</div>
                 <div className="speaker-label"><i />{person.name}<small>{person.role}</small></div>
               </div>
-            )) : <div className="real-data-stage"><Video size={42} /><strong>Live participant video opens securely in the room</strong><small>No fabricated speaker portraits are shown.</small></div>}
+            )) : <div className="real-data-stage"><Video size={42} /><div><strong>Live participant video opens securely in the room</strong><small>No fabricated speaker portraits are shown.</small></div></div>}
             <div className="signal-lines" />
-            <div className="live-corner"><span>{mode === "demo" ? "DEMO" : stageCount > 0 ? "LIVE" : venueSnapshot?.mediaAvailable ? "READY" : "OFFLINE"}</span><strong>{mode === "demo" ? "48:12" : stageCount}</strong></div>
+            <div className="live-corner"><span className={mode === "demo" ? "demo" : stageCount > 0 ? "live" : venueSnapshot?.mediaAvailable ? "ready" : "unavailable"}>{mode === "demo" ? "DEMO" : stageCount > 0 ? "LIVE" : venueSnapshot?.mediaAvailable ? "READY" : "OFFLINE"}</span><strong>{mode === "demo" ? "48:12" : stageCount}</strong></div>
           </div>
         </section>
 
@@ -1111,7 +1129,7 @@ function AttendeeView({
                 </li>
               ))}
             </ol>
-          ) : <p className="experience-empty">The producer has not published an agenda yet.</p>}
+          ) : <div className="experience-empty actionable-empty"><div><strong>Schedule coming soon</strong><span>The producer has not published the agenda yet. You can still explore rooms or preview the complete experience in Demo mode.</span></div><button className="secondary-button" type="button" onClick={() => navigateTo("venue")}>Explore venue</button></div>}
         </section>
 
         <div className="section-heading">

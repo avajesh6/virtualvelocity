@@ -146,6 +146,10 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(experience, /navigateTo\("agenda"\)/);
   assert.match(experience, /Join the room to use Live chat/);
   assert.match(experience, /navigationTarget=\{experienceNavigation\}/);
+  assert.match(experience, /mobile-session-menu/);
+  assert.match(experience, /StatusPill tone=\{mode === "demo"/);
+  assert.match(experience, /Schedule coming soon/);
+  assert.match(experience, /className="real-data-stage".*<div><strong>/);
   assert.match(hub, /Demo mutations intentionally stop here/);
   assert.match(hub, /action === "answer-poll"/);
   assert.match(hub, /action === "request-connection"/);
@@ -159,6 +163,9 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.match(styles, /\.room-grid, \.right-rail \{ grid-template-columns: 1fr; \}/);
   assert.match(styles, /\.attendee-agenda-list/);
+  assert.match(styles, /\.live-feature \{[\s\S]*color: #f0f4f8;/);
+  assert.match(styles, /\.desktop-session-controls \{ display: none; \}/);
+  assert.match(styles, /\.status-pill\.ready/);
 });
 
 test("hardens irreversible operations and external delivery", async () => {
