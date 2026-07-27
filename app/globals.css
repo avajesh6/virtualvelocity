@@ -1436,6 +1436,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   box-shadow: inset 0 0 0 3px #111a26;
   background: var(--cyan);
 }
+.live-dialog .media-engine-picker label.unavailable {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+.live-dialog .media-engine-picker label.unavailable::before {
+  border-color: #5f6b7c;
+  background: #273345;
+}
+.live-dialog .media-engine-picker label.unavailable strong,
+.live-dialog .media-engine-picker label.unavailable small {
+  color: #aeb9c8;
+}
 .live-dialog .media-engine-picker label:has(input:focus-visible) {
   outline: 3px solid rgba(0, 240, 255, 0.42);
   outline-offset: 2px;

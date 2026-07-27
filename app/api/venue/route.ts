@@ -18,6 +18,11 @@ function getRoomClient() {
 
 export async function GET() {
   const client = getRoomClient();
+  // Provider availability is safe to expose as a boolean. Credentials remain
+  // server-only, while the lobby can avoid offering an unusable media path.
+  const agoraAvailable = Boolean(
+    process.env.AGORA_APP_ID && process.env.AGORA_APP_CERTIFICATE,
+  );
   let mediaAvailable = Boolean(client);
   let mediaError: string | null = null;
   const counts = new Map<string, number>();
@@ -85,6 +90,7 @@ export async function GET() {
     serverTime: new Date().toISOString(),
     mediaAvailable,
     mediaError,
+    agoraAvailable,
     scheduleAvailable,
     rooms,
     totalParticipants: rooms.reduce((total, room) => total + room.participantCount, 0),

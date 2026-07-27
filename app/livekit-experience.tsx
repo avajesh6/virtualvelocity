@@ -24,7 +24,7 @@ export type LiveConnection = {
   choices: LocalUserChoices;
 };
 
-export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defaultName, audioEnabled, videoEnabled, engine, setEngine, joining, error, close, connect }: {
+export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defaultName, audioEnabled, videoEnabled, engine, setEngine, agoraAvailable, joining, error, close, connect }: {
   roomTitle: string;
   roomDescription: string;
   attendeeCount: number;
@@ -33,6 +33,7 @@ export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defa
   videoEnabled: boolean;
   engine: "livekit" | "agora";
   setEngine: (engine: "livekit" | "agora") => void;
+  agoraAvailable: boolean;
   joining: boolean;
   error: string | null;
   close: () => void;
@@ -51,7 +52,7 @@ export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defa
           <fieldset className="media-engine-picker" disabled={joining}>
             <legend>Media provider</legend>
             <label className={engine === "livekit" ? "active" : ""}><input type="radio" name="media-engine" value="livekit" checked={engine === "livekit"} onChange={() => setEngine("livekit")} /><span><strong>LiveKit</strong><small>Video, chat, screen sharing, and captions</small></span></label>
-            <label className={engine === "agora" ? "active" : ""}><input type="radio" name="media-engine" value="agora" checked={engine === "agora"} onChange={() => setEngine("agora")} /><span><strong>Agora</strong><small>Alternative audio/video infrastructure</small></span></label>
+            <label className={`${engine === "agora" ? "active" : ""}${!agoraAvailable ? " unavailable" : ""}`} aria-disabled={!agoraAvailable}><input type="radio" name="media-engine" value="agora" checked={engine === "agora"} disabled={!agoraAvailable} onChange={() => setEngine("agora")} /><span><strong>Agora</strong><small>{agoraAvailable ? "Alternative audio/video infrastructure" : "Unavailable for this event"}</small></span></label>
           </fieldset>
         </div>
         <PreJoin

@@ -101,6 +101,7 @@ type VenueSnapshot = {
   serverTime: string;
   mediaAvailable: boolean;
   mediaError: string | null;
+  agoraAvailable: boolean;
   scheduleAvailable: boolean;
   totalParticipants: number;
   activeRooms: number;
@@ -288,6 +289,7 @@ export function ConferenceExperience() {
   const [activeEngine, setActiveEngine] = useState<"livekit" | "agora">("livekit");
   const [venueSnapshot, setVenueSnapshot] = useState<VenueSnapshot | null>(null);
   const [venueStatus, setVenueStatus] = useState<"loading" | "ready" | "error">("loading");
+  const agoraAvailable = venueSnapshot?.agoraAvailable === true;
 
   const displayRooms = useMemo(() => {
     if (mode === "demo") return demoRooms;
@@ -339,6 +341,10 @@ export function ConferenceExperience() {
         const payload = await response.json() as VenueSnapshot;
         if (!cancelled) {
           setVenueSnapshot(payload);
+          if (!payload.agoraAvailable) {
+            setActiveEngine("livekit");
+            setLiveError(null);
+          }
           setVenueStatus("ready");
         }
       } catch {
@@ -687,6 +693,10 @@ export function ConferenceExperience() {
       if (!roomName) throw new Error("This room is not configured.");
 
       if (activeEngine === "agora") {
+        if (!agoraAvailable) {
+          setActiveEngine("livekit");
+          throw new Error("Agora is unavailable for this event. Choose LiveKit to join.");
+        }
         const response = await fetch("/api/agora-token", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -884,6 +894,7 @@ export function ConferenceExperience() {
           videoEnabled={cameraOn}
           engine={activeEngine}
           setEngine={setActiveEngine}
+          agoraAvailable={agoraAvailable}
           joining={liveJoining}
           error={liveError}
           close={() => setLiveDialogOpen(false)}
