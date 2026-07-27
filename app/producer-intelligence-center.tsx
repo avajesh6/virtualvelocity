@@ -168,7 +168,7 @@ export function ProducerIntelligenceCenter({
               <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--cyan)", letterSpacing: "0.05em" }}>⚡ WEBRTC INFRASTRUCTURE ENGINE</span>
               <span className="status-pill live" style={{ fontSize: 9 }}>ATTENDEE SELECTABLE</span>
             </div>
-            <p style={{ margin: 0, fontSize: "12px", color: "var(--text-main)" }}>
+            <p style={{ margin: 0, fontSize: "12px", color: "var(--text)" }}>
               LiveKit is the default. Attendees can explicitly select configured Agora infrastructure in the device lobby.
             </p>
           </div>

@@ -29,7 +29,6 @@ import {
   MoreHorizontal,
   Radio,
   Send,
-  Settings2,
   ShieldCheck,
   Sparkles,
   Store,
@@ -843,7 +842,6 @@ export function ConferenceExperience() {
           captureLead={captureLead}
           openLiveRoom={openLiveRoom}
           liveConnected={Boolean(liveConnection || agoraConnection)}
-          activeEngine={activeEngine}
           notify={setNotice}
         />
       ) : (
@@ -960,7 +958,6 @@ function AttendeeView({
   captureLead,
   openLiveRoom,
   liveConnected,
-  activeEngine,
   notify,
 }: {
   mode: AppMode;
@@ -985,7 +982,6 @@ function AttendeeView({
   captureLead: () => void;
   openLiveRoom: (room?: RoomId) => void;
   liveConnected: boolean;
-  activeEngine: "livekit" | "agora";
   notify: (message: string) => void;
 }) {
   const [chatDraft, setChatDraft] = useState("");
@@ -1132,16 +1128,9 @@ function AttendeeView({
           ) : <div className="experience-empty actionable-empty"><div><strong>Schedule coming soon</strong><span>The producer has not published the agenda yet. You can still explore rooms or preview the complete experience in Demo mode.</span></div><button className="secondary-button" type="button" onClick={() => navigateTo("venue")}>Explore venue</button></div>}
         </section>
 
-        <div className="section-heading">
-          <div><span className="eyebrow">EXPLORE THE VENUE</span><h3>Where do you want to go?</h3></div>
+        <div className="section-heading room-picker-heading">
+          <div><span className="eyebrow">EXPLORE THE VENUE</span><h3>Choose a room</h3><p>Select a space to open its secure video lobby.</p></div>
           <button className="text-button" onClick={() => navigateTo("agenda")}>View full agenda <ChevronRight size={16} /></button>
-        </div>
-
-        <div className="conference-capability-strip" aria-label="Conference capabilities">
-          <span><Video size={15} /><strong>HD video</strong><small>Adaptive quality</small></span>
-          <span><MonitorUp size={15} /><strong>Screen sharing</strong><small>{activeEngine === "livekit" ? "Available in LiveKit rooms" : "Choose LiveKit to present"}</small></span>
-          <span><MessageSquareText size={15} /><strong>Live chat</strong><small>{activeEngine === "livekit" ? "Available after joining" : "Choose LiveKit for room chat"}</small></span>
-          <span><Settings2 size={15} /><strong>Device control</strong><small>Switch during the call</small></span>
         </div>
 
         <div className="room-grid" id="rooms">

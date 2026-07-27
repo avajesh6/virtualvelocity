@@ -149,6 +149,9 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(experience, /mobile-session-menu/);
   assert.match(experience, /StatusPill tone=\{mode === "demo"/);
   assert.match(experience, /Schedule coming soon/);
+  assert.match(experience, /Choose a room/);
+  assert.match(experience, /Select a space to open its secure video lobby/);
+  assert.doesNotMatch(experience, /conference-capability-strip/);
   assert.match(experience, /className="real-data-stage".*<div><strong>/);
   assert.match(hub, /Demo mutations intentionally stop here/);
   assert.match(hub, /action === "answer-poll"/);
@@ -174,6 +177,11 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(styles, /\.confirmation-dialog \{[\s\S]*max-height: calc\(100dvh - 40px\);[\s\S]*overflow-y: auto;/);
   assert.match(styles, /\.chat-input input \{[\s\S]*color: var\(--text\);/);
   assert.match(styles, /\.producer-nav-item\.active \{[\s\S]*color: var\(--text\);/);
+  assert.match(styles, /\.interest-editor \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(styles, /\.match-card \{[\s\S]*grid-template-columns: auto minmax\(0, 1fr\) auto;/);
+  assert.match(styles, /\.intelligence-grid \{[\s\S]*grid-template-columns: 1fr 1fr;/);
+  assert.match(styles, /\.bottom-grid \{[\s\S]*grid-template-columns: 1\.1fr 0\.9fr;/);
+  assert.match(styles, /\.support-request-form \{[\s\S]*overflow-y: auto;/);
 });
 
 test("hardens irreversible operations and external delivery", async () => {
