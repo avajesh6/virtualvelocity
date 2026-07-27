@@ -166,6 +166,14 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(styles, /\.live-feature \{[\s\S]*color: #f0f4f8;/);
   assert.match(styles, /\.desktop-session-controls \{ display: none; \}/);
   assert.match(styles, /\.status-pill\.ready/);
+  assert.match(styles, /\.live-dialog \{[\s\S]*max-height: calc\(100dvh - 40px\);[\s\S]*overflow-y: auto;/);
+  assert.match(styles, /\.live-dialog input:not\(\[type="radio"\]\):not\(\[type="checkbox"\]\)/);
+  assert.match(styles, /\.live-prejoin-dialog \{[\s\S]*grid-template-columns: minmax\(250px, 0\.8fr\) minmax\(360px, 1\.2fr\)/);
+  assert.match(styles, /\.media-engine-picker input\[type="radio"\][\s\S]*width: 1px;/);
+  assert.match(styles, /\.modal-backdrop \{[\s\S]*overflow-y: auto;/);
+  assert.match(styles, /\.confirmation-dialog \{[\s\S]*max-height: calc\(100dvh - 40px\);[\s\S]*overflow-y: auto;/);
+  assert.match(styles, /\.chat-input input \{[\s\S]*color: var\(--text\);/);
+  assert.match(styles, /\.producer-nav-item\.active \{[\s\S]*color: var\(--text\);/);
 });
 
 test("hardens irreversible operations and external delivery", async () => {

@@ -56,6 +56,7 @@ export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defa
         </div>
         <PreJoin
           className="velocity-prejoin"
+          data-lk-theme="default"
           defaults={{ username: defaultName, videoEnabled, audioEnabled }}
           joinLabel={joining ? "Connecting securely…" : "Join conference"}
           micLabel="Microphone"

@@ -51,22 +51,27 @@
   display: grid;
   place-items: center;
   padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(4, 8, 18, .76);
   backdrop-filter: blur(8px);
 }
 
 .confirmation-dialog {
   width: min(460px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   padding: 24px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line-bright);
   border-radius: 16px;
   background: var(--panel);
+  color: var(--text);
   box-shadow: 0 24px 80px rgba(0, 0, 0, .45);
 }
 
 .confirmation-dialog h2 { margin: 0 0 10px; font-size: 20px; }
-.confirmation-dialog p { margin: 0; color: var(--text-muted); line-height: 1.55; }
-.confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.confirmation-dialog p { margin: 0; color: var(--muted); line-height: 1.55; }
+.confirmation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .danger-button { border: 1px solid #ff5f72; background: #b91c3c; color: white; }
 .media-engine-picker {
   border: 0;
@@ -163,6 +168,13 @@ body {
 
 button, input, textarea, select {
   font-family: inherit;
+}
+input, textarea, select {
+  color: var(--text);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 button {
   color: inherit;
@@ -269,6 +281,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   top: calc(100% + 10px);
   right: 0;
   width: min(280px, calc(100vw - 24px));
+  max-height: calc(100dvh - 76px);
+  overflow-y: auto;
   padding: 14px;
   border: 1px solid var(--line-bright);
   border-radius: var(--radius-md);
@@ -1261,19 +1275,36 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .live-dialog {
   width: min(480px, 100%);
   position: relative;
-  border: 1px solid var(--line-bright);
+  max-height: calc(100dvh - 40px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: var(--radius-lg);
   background: linear-gradient(145deg, #161e2b, #0d121a);
+  color: #f0f4f8;
   padding: 36px;
   box-shadow: var(--shadow-lg);
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+/* The device lobby uses a wider two-column layout to keep Join visible on laptops. */
+.live-prejoin-dialog {
+  width: min(880px, 100%);
+  display: grid;
+  grid-template-columns: minmax(250px, 0.8fr) minmax(360px, 1.2fr);
+  align-items: start;
+  gap: 26px 30px;
 }
 .live-dialog-close {
   position: absolute;
   right: 18px;
   top: 18px;
-  border: 1px solid var(--line);
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 50%;
-  background: var(--control-bg);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
   width: 36px;
   height: 36px;
   display: grid;
@@ -1282,16 +1313,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   transition: all 0.2s ease;
 }
 .live-dialog-close:hover {
-  background: var(--line-bright);
+  background: rgba(255, 255, 255, 0.16);
 }
 .live-dialog h2 {
+  color: #f8fafc;
   font-size: 32px;
   letter-spacing: -0.04em;
   font-weight: 800;
   margin: 18px 0 8px;
 }
-.live-dialog > p {
-  color: var(--muted);
+.live-dialog > p,
+.prejoin-heading > p {
+  color: #aeb9c8;
   font-size: 13px;
   line-height: 1.55;
   margin: 0 0 24px;
@@ -1305,16 +1338,159 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   text-transform: uppercase;
   margin-bottom: 8px;
 }
-.live-dialog input {
+.live-dialog input:not([type="radio"]):not([type="checkbox"]) {
   width: 100%;
   height: 46px;
   border: 1px solid var(--line-bright);
   border-radius: var(--radius-md);
-  background: var(--input-bg);
+  /* Live dialogs are intentionally dark in both app themes. */
+  background: #111722;
   color: #fff;
   padding: 0 14px;
   margin-bottom: 14px;
   font-size: 13px;
+}
+
+.prejoin-heading {
+  min-width: 0;
+  padding-top: 2px;
+}
+.prejoin-heading .eyebrow {
+  color: var(--lime);
+}
+.prejoin-room-facts {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.prejoin-room-facts span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c8d1dc;
+  font-size: 11px;
+}
+.prejoin-room-facts svg {
+  flex: 0 0 auto;
+  color: var(--cyan);
+}
+
+/* Keep native radios accessible without letting global dialog input sizing enlarge them. */
+.live-dialog .media-engine-picker {
+  margin-top: 22px;
+}
+.live-dialog .media-engine-picker legend {
+  color: #aeb9c8;
+}
+.live-dialog .media-engine-picker label {
+  position: relative;
+  min-height: 76px;
+  margin: 0;
+  padding: 12px 12px 12px 42px;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.live-dialog .media-engine-picker label::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #778396;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.live-dialog .media-engine-picker label.active::before {
+  border-color: var(--cyan);
+  box-shadow: inset 0 0 0 3px #111a26;
+  background: var(--cyan);
+}
+.live-dialog .media-engine-picker label:has(input:focus-visible) {
+  outline: 3px solid rgba(0, 240, 255, 0.42);
+  outline-offset: 2px;
+}
+.live-dialog .media-engine-picker input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0.01;
+  pointer-events: none;
+}
+.live-dialog .media-engine-picker strong {
+  color: #f8fafc;
+  font-size: 11px;
+}
+.live-dialog .media-engine-picker small {
+  margin-top: 3px;
+  color: #aeb9c8;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+/* Override the library defaults within the branded pre-join surface only. */
+.live-prejoin-dialog .velocity-prejoin {
+  --lk-bg: transparent;
+  --lk-bg2: #182331;
+  --lk-bg3: #243244;
+  --lk-bg4: #304158;
+  --lk-fg: #f8fafc;
+  --lk-control-fg: #f8fafc;
+  --lk-control-bg: #182331;
+  --lk-control-hover-bg: #243244;
+  --lk-border-color: rgba(255, 255, 255, 0.16);
+  --lk-accent-fg: #071015;
+  --lk-accent-bg: var(--lime);
+  --lk-accent2: #b9ed78;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+.live-prejoin-dialog .velocity-prejoin .lk-video-container {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #070b11;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+}
+.live-prejoin-dialog .velocity-prejoin .lk-camera-off-note {
+  background: radial-gradient(circle at 50% 35%, #1b2737, #080d14 70%);
+  color: #748195;
+}
+.live-prejoin-dialog .velocity-prejoin .lk-form-control {
+  min-height: 46px;
+  color: #f8fafc;
+}
+.live-prejoin-dialog .velocity-prejoin .lk-form-control::placeholder {
+  color: #9ca8b8;
+}
+.live-prejoin-dialog .velocity-prejoin .lk-button {
+  min-height: 44px;
+}
+.live-prejoin-dialog .velocity-prejoin .lk-join-button {
+  color: #071015;
+  font-weight: 800;
+}
+.live-prejoin-dialog .velocity-prejoin .lk-join-button:disabled {
+  cursor: not-allowed;
+}
+.live-prejoin-dialog .live-error,
+.live-prejoin-dialog .live-demo-link {
+  grid-column: 1 / -1;
+}
+.live-demo-link {
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  color: #b9c4d1;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.live-demo-link:hover {
+  color: #f8fafc;
 }
 
 .preflight-devices {
@@ -1363,7 +1539,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--muted);
+  color: #aeb9c8;
   font-size: 10px;
   line-height: 1.45;
   margin-top: 16px;
@@ -1403,7 +1579,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--muted);
+  color: #aeb9c8;
   font-size: 9px;
   letter-spacing: 0.14em;
   margin: 0 0 18px;
@@ -1495,9 +1671,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .chat-input input {
   background: transparent;
   border: 0;
-  color: #fff;
+  color: var(--text);
   padding: 14px;
   font-size: 12px;
+}
+.chat-input input::placeholder {
+  color: var(--muted);
 }
 .chat-input button {
   border: 0;
@@ -1703,7 +1882,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: rgba(255, 255, 255, 0.04);
 }
 .producer-nav-item.active {
-  color: #fff;
+  color: var(--text);
   background: var(--panel-2);
   box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.05);
 }
@@ -1761,7 +1940,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .last-updated { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .confirmation-dialog label { display: block; margin-top: 18px; color: var(--text); font-size: 12px; font-weight: 700; }
-.confirmation-dialog textarea { width: 100%; min-height: 120px; margin-top: 7px; resize: vertical; }
+.confirmation-dialog textarea {
+  width: 100%;
+  min-height: 120px;
+  margin-top: 7px;
+  resize: vertical;
+  border: 1px solid var(--line-bright);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 12px;
+}
 .demo-resource { border: 0; background: transparent; color: var(--cyan); padding: 0; text-decoration: underline; }
 
 .rescue-banner {
@@ -1988,7 +2177,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   box-shadow: 0 0 10px var(--coral);
 }
 .ros-item.active .ros-copy strong {
-  color: #fff;
+  color: var(--text);
   font-size: 12px;
 }
 .ros-status {
@@ -2300,6 +2489,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 
 @media (max-width: 780px) {
+  .modal-backdrop { padding: 12px; place-items: start center; }
+  .confirmation-dialog { max-height: calc(100dvh - 24px); }
+  .live-dialog-backdrop { padding: 12px; }
+  .live-dialog { max-height: calc(100dvh - 24px); }
+  .live-prejoin-dialog {
+    width: min(520px, 100%);
+    grid-template-columns: 1fr;
+    gap: 22px;
+    padding: 28px 22px;
+  }
+  .live-prejoin-dialog .prejoin-heading { padding-right: 36px; }
+  .live-prejoin-dialog .media-engine-picker { grid-template-columns: 1fr 1fr; }
+  .live-prejoin-dialog .velocity-prejoin .lk-video-container { aspect-ratio: 16 / 9; }
   .experience-tabs { grid-template-columns: 1fr 1fr; }
   .experience-grid, .memory-grid, .command-grid, .metric-grid { grid-template-columns: 1fr; }
   .topbar { grid-template-columns: auto minmax(0, 1fr); height: 64px; padding: 0 12px; gap: 10px; }
@@ -2347,6 +2549,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 
 @media (max-width: 520px) {
+  .live-dialog-backdrop { place-items: start center; padding: 8px; }
+  .live-dialog { max-height: calc(100dvh - 16px); border-radius: 14px; }
+  .live-prejoin-dialog { padding: 24px 16px 20px; gap: 18px; }
+  .live-dialog-close { top: 12px; right: 12px; }
+  .live-prejoin-dialog .prejoin-heading { padding-right: 34px; }
+  .live-dialog h2 { font-size: 26px; margin-top: 14px; }
+  .live-prejoin-dialog .media-engine-picker { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .live-dialog .media-engine-picker label { min-height: 68px; padding: 10px 8px 10px 34px; }
+  .live-dialog .media-engine-picker label::before { left: 10px; }
+  .live-prejoin-dialog .velocity-prejoin .lk-video-container { aspect-ratio: 2 / 1; }
+  .live-prejoin-dialog .velocity-prejoin { gap: 12px; }
+  .live-prejoin-dialog .velocity-prejoin .lk-button-group-container { gap: 8px; }
+  .confirmation-actions > button { flex: 1 1 130px; }
+  .toast { bottom: 76px; width: max-content; max-width: calc(100vw - 24px); justify-content: center; text-align: center; }
   .brand > span:last-child { display: none; }
   .topbar { grid-template-columns: 28px minmax(0, 1fr); }
   .top-actions { overflow: visible; gap: 6px; }
