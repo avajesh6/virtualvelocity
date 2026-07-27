@@ -443,6 +443,7 @@ export function EventExperienceHub({
             <h4>Ask the stage</h4>
             <p>Questions are visible to attendees and ranked by verified votes.</p>
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} minLength={5} maxLength={500} required placeholder="What would you like the speakers to address?" />
+            <small className="field-hint">Enter at least 5 characters to enable submission.</small>
             <button type="submit" disabled={busy || question.trim().length < 5}><Send size={15} />Submit question</button>
             <div className="quick-reactions" aria-label="Quick audience reactions">
               <button type="button" onClick={() => void post({ action: "reaction", room: currentRoomName, response: "applause" }, "Applause sent.")}>👏 Applause</button>

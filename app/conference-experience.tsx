@@ -1235,6 +1235,7 @@ function AttendeeView({
             <p>{appUser ? `Signed in as ${appUser.email}` : "Sign in first so producers can respond to you."}</p>
             <label htmlFor="support-issue">What is happening?</label>
             <textarea id="support-issue" value={supportIssue} onChange={(event) => setSupportIssue(event.target.value)} minLength={5} maxLength={500} required placeholder="Describe the audio, video, screen-sharing, or access problem." />
+            <small className="field-hint">Enter at least 5 characters so the producer has enough detail to respond.</small>
             <button className="primary-button full" type="submit" disabled={supportBusy || supportIssue.trim().length < 5}>{supportBusy ? "Sending…" : "Send to producer queue"}</button>
           </form>
         </div>
@@ -1803,6 +1804,7 @@ function AnnouncementDialog({ value, busy, onChange, onCancel, onSubmit }: { val
         <p>Publish an operational update in the venue and deliver it to configured Slack and Teams channels.</p>
         <label htmlFor="announcement-message">Message</label>
         <textarea id="announcement-message" autoFocus required minLength={3} maxLength={500} value={value} onChange={(event) => onChange(event.target.value)} />
+        <small className="field-hint">Enter between 3 and 500 characters.</small>
         <div className="confirmation-actions"><button type="button" className="secondary-button" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="primary-button" disabled={busy || value.trim().length < 3}>{busy ? "Sending…" : "Publish announcement"}</button></div>
       </form>
     </div>

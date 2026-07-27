@@ -16,6 +16,7 @@
   --nav-bg: #090c12;
   --control-bg: #1e2837;
   --input-bg: #111722;
+  --disabled-text: #b9c4d2;
   --overlay: rgba(3, 5, 8, 0.85);
   
   --lime: #c8ff63;
@@ -111,6 +112,7 @@
   --nav-bg: #f1f5f9;
   --control-bg: #e2e8f0;
   --input-bg: #f8fafc;
+  --disabled-text: #475569;
   --overlay: rgba(15, 23, 42, 0.6);
   
   --lime: #4d7c0f;
@@ -180,8 +182,8 @@ button {
   color: inherit;
 }
 button:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
+  /* Component-level button styles sometimes set pointer; keep inactive actions honest. */
+  cursor: not-allowed !important;
 }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: 2px solid var(--lime);
@@ -731,8 +733,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   box-shadow: 0 4px 16px var(--green-glow);
 }
 .primary-button:disabled {
-  cursor: default;
-  opacity: 0.8;
+  border: 1px solid var(--line-bright);
+  background: var(--control-bg);
+  color: var(--disabled-text);
+  box-shadow: none;
+  filter: none;
+  opacity: 1;
+  transform: none;
+}
+.primary-button.success:disabled {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: var(--green-glow);
+  color: var(--green);
 }
 .secondary-button {
   background: var(--glass-bg);
@@ -740,10 +752,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   color: var(--text);
   backdrop-filter: blur(10px);
 }
-.secondary-button:hover {
+.secondary-button:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.3);
   background: var(--control-bg);
   transform: translateY(-1px);
+}
+.secondary-button:disabled {
+  border-color: var(--line);
+  background: var(--control-bg);
+  color: var(--disabled-text);
+  opacity: 1;
 }
 .primary-button.full, .secondary-button {
   width: 100%;
@@ -1597,6 +1615,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .google-auth-button:hover {
   background: #f1f5f9;
 }
+.google-auth-button:disabled {
+  background: #e2e8f0;
+  color: #64748b;
+  opacity: 1;
+}
 .google-auth-button span {
   width: 22px;
   height: 22px;
@@ -1722,6 +1745,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .chat-input button:hover:not(:disabled) {
   filter: brightness(1.1);
 }
+.chat-input button:disabled {
+  background: var(--control-bg);
+  color: var(--disabled-text);
+  opacity: 1;
+}
 .support-request-panel {
   height: auto;
   max-height: min(520px, calc(100dvh - 48px));
@@ -1752,6 +1780,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--input-bg);
   color: var(--text);
   padding: 12px;
+}
+.field-hint {
+  margin: -5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* Full-room media surface shared by live providers and the safe demo preview. */
@@ -2487,6 +2521,37 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--lime);
   color: #07090e;
   box-shadow: 0 0 16px var(--lime-glow);
+}
+
+/* Disabled actions remain readable and unmistakably inactive in both themes. */
+.experience-form > button:disabled,
+.accessibility-panel > button:disabled,
+.producer-mini-form > button:disabled,
+.recording-control button:disabled,
+.memory-generate-button:disabled,
+.run-item-form button:disabled,
+.health-actions button:disabled,
+.live-participants button:disabled,
+.support-ticket button:disabled,
+.question-meta button:disabled,
+.incoming-request button:disabled,
+.schedule-intro button:disabled,
+.match-card > button:disabled,
+.sponsor-card button:disabled,
+.moderator-list button:disabled,
+.danger-button:disabled,
+.role-switch button:disabled {
+  border-color: var(--line-bright);
+  background: var(--control-bg);
+  color: var(--disabled-text);
+  box-shadow: none;
+  filter: none;
+  opacity: 1;
+  transform: none;
+}
+.poll-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .quick-reactions {
@@ -3343,6 +3408,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 
 @media (max-width: 520px) {
+  /* Give every mobile action a dependable touch target, including link-style buttons. */
+  button { min-width: 40px; min-height: 40px; }
   .live-dialog-backdrop { place-items: start center; padding: 8px; }
   .live-dialog { max-height: calc(100dvh - 16px); border-radius: 14px; }
   .live-prejoin-dialog { padding: 24px 16px 20px; gap: 18px; }
@@ -3364,7 +3431,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .mobile-session-menu { display: block; order: -1; }
   .mobile-session-panel { position: fixed; top: 58px; right: 12px; }
   .mobile-session-panel .mode-switch button, .mobile-session-panel .role-switch button { padding: 8px 10px; }
-  .icon-button, .profile-button { flex: 0 0 34px; width: 34px; height: 34px; }
+  .icon-button, .profile-button { flex: 0 0 40px; width: 40px; height: 40px; }
   .experience-tabs { grid-template-columns: 1fr; }
   .experience-heading, .section-heading { align-items: flex-start; flex-direction: column; }
   .experience-source { white-space: normal; }

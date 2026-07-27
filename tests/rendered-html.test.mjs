@@ -185,6 +185,13 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(styles, /\.intelligence-grid \{[\s\S]*grid-template-columns: 1fr 1fr;/);
   assert.match(styles, /\.bottom-grid \{[\s\S]*grid-template-columns: 1\.1fr 0\.9fr;/);
   assert.match(styles, /\.support-request-form \{[\s\S]*overflow-y: auto;/);
+  assert.match(styles, /--disabled-text: #475569;/);
+  assert.match(styles, /button:disabled \{[\s\S]*cursor: not-allowed !important;/);
+  assert.match(styles, /\.field-hint \{[\s\S]*font-size: 11px;/);
+  assert.match(styles, /@media \(max-width: 520px\) \{[\s\S]*button \{ min-width: 40px; min-height: 40px; \}/);
+  assert.match(styles, /\.experience-form > button:disabled,[\s\S]*background: var\(--control-bg\);[\s\S]*color: var\(--disabled-text\);[\s\S]*opacity: 1;/);
+  assert.match(experience, /Enter at least 5 characters so the producer has enough detail/);
+  assert.match(hub, /Enter at least 5 characters to enable submission/);
 });
 
 test("hardens irreversible operations and external delivery", async () => {
