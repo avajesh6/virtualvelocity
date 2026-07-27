@@ -55,6 +55,7 @@ export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defa
           </fieldset>
         </div>
         <PreJoin
+          key={`${roomTitle}:${defaultName}`}
           className="velocity-prejoin"
           data-lk-theme="default"
           defaults={{ username: defaultName, videoEnabled, audioEnabled }}
@@ -67,6 +68,7 @@ export function LiveJoinDialog({ roomTitle, roomDescription, attendeeCount, defa
           onSubmit={(choices) => void connect(choices)}
           onError={(joinError) => console.warn("Media preview unavailable", joinError)}
         />
+        <p className="prejoin-action-help">Enter a display name to enable Join conference. Camera and microphone are optional.</p>
         {error && <div className="live-error" role="alert"><AlertTriangle size={16} /><span><strong>Unable to join this room</strong>{error}</span></div>}
         <button className="live-demo-link" type="button" onClick={close}>Continue exploring the venue</button>
       </section>

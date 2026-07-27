@@ -1480,11 +1480,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   min-height: 44px;
 }
 .live-prejoin-dialog .velocity-prejoin .lk-join-button {
-  color: #071015;
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #b8e86a;
+  background: #a8d85e;
+  color: #0b1407;
   font-weight: 800;
+  box-shadow: 0 8px 24px rgba(168, 216, 94, 0.18);
+}
+.live-prejoin-dialog .velocity-prejoin .lk-join-button:hover:not(:disabled) {
+  border-color: #d0f58a;
+  background: #b8e86a;
+  color: #071005;
 }
 .live-prejoin-dialog .velocity-prejoin .lk-join-button:disabled {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #273345;
+  color: #b9c4d2;
+  box-shadow: none;
   cursor: not-allowed;
+  opacity: 1;
+}
+.prejoin-action-help {
+  grid-column: 2;
+  margin: -16px 0 0;
+  color: #aeb9c8;
+  font-size: 10px;
+  line-height: 1.45;
 }
 .live-prejoin-dialog .live-error,
 .live-prejoin-dialog .live-demo-link {
@@ -3261,6 +3283,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     padding: 28px 22px;
   }
   .live-prejoin-dialog .prejoin-heading { padding-right: 36px; }
+  .prejoin-action-help { grid-column: 1; }
   .live-prejoin-dialog .media-engine-picker { grid-template-columns: 1fr 1fr; }
   .live-prejoin-dialog .velocity-prejoin .lk-video-container { aspect-ratio: 16 / 9; }
   .experience-tabs { grid-template-columns: 1fr 1fr; }

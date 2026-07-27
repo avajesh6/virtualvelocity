@@ -21,6 +21,8 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.match(livekitExperience, /VideoConference/);
   assert.match(livekitExperience, /PreJoin/);
   assert.match(livekitExperience, /persistUserChoices=\{false\}/);
+  assert.match(livekitExperience, /key=\{`\$\{roomTitle\}:\$\{defaultName\}`\}/);
+  assert.match(livekitExperience, /Enter a display name to enable Join conference/);
   assert.match(livekitExperience, /useConnectionState/);
   assert.match(livekitExperience, /useParticipants/);
   assert.match(experience, /velocity-theme/);
@@ -173,6 +175,7 @@ test("keeps demo mode isolated, interactive, and responsive", async () => {
   assert.match(styles, /\.live-dialog input:not\(\[type="radio"\]\):not\(\[type="checkbox"\]\)/);
   assert.match(styles, /\.live-prejoin-dialog \{[\s\S]*grid-template-columns: minmax\(250px, 0\.8fr\) minmax\(360px, 1\.2fr\)/);
   assert.match(styles, /\.media-engine-picker input\[type="radio"\][\s\S]*width: 1px;/);
+  assert.match(styles, /\.lk-join-button:disabled \{[\s\S]*background: #273345;[\s\S]*color: #b9c4d2;[\s\S]*opacity: 1;/);
   assert.match(styles, /\.modal-backdrop \{[\s\S]*overflow-y: auto;/);
   assert.match(styles, /\.confirmation-dialog \{[\s\S]*max-height: calc\(100dvh - 40px\);[\s\S]*overflow-y: auto;/);
   assert.match(styles, /\.chat-input input \{[\s\S]*color: var\(--text\);/);
