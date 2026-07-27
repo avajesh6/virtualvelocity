@@ -43,7 +43,9 @@ test("rejects invalid and unauthorized API requests safely", async () => {
   assert.equal(translation.status, 400);
   assert.equal(operations.status, 401);
   assert.equal(integrations.status, 401);
-  assert.equal(lead.status, 400);
+  // Authentication runs before payload validation so unauthenticated callers
+  // cannot use validation details to probe the protected lead endpoint.
+  assert.equal(lead.status, 401);
 });
 
 test("handles a representative concurrent page burst", async () => {
