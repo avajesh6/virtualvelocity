@@ -123,23 +123,24 @@ a representative concurrent request burst.
 
 ## Deploy
 
-Pushes to `main` are validated and deployed automatically by
-`.github/workflows/deploy.yml`. The workflow installs the locked dependencies,
-runs lint and the complete build/test suite, and deploys only after those checks
-pass. It can also be rerun manually from the repository's **Actions** page.
+Pushes to `main` use two deliberately separate services:
 
-The repository requires:
+- `.github/workflows/deploy.yml` installs the locked dependencies, runs lint,
+  and executes the complete build/test suite. It can also be rerun manually
+  from the repository's **Actions** page.
+- Cloudflare's native Git integration is the sole production publisher. It
+  watches `main` and creates the Worker deployment without a GitHub API token.
 
-- GitHub variable `CLOUDFLARE_ACCOUNT_ID`
+Keeping one publisher prevents duplicate Worker versions while leaving GitHub
+Actions focused on repeatable validation.
+
+GitHub validation requires:
+
 - GitHub variables `NEXT_PUBLIC_LIVEKIT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and
   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- GitHub secret `CLOUDFLARE_API_TOKEN`, created with the minimum Cloudflare
-  Workers deployment permissions for this account
 
-Until that secret is added, pushes still run every validation check but skip
-the deployment with a visible Actions notice. Add the secret and run the
-workflow manually once to activate deployment without requiring another code
-change.
+Do not add `CLOUDFLARE_API_TOKEN` to this workflow while Cloudflare's native
+Git integration is active; doing so would create two independent publishers.
 
 Worker runtime secrets such as `LIVEKIT_API_SECRET` remain stored in Cloudflare
 and are not copied into GitHub. Database migrations remain an explicit,
