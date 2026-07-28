@@ -23,7 +23,7 @@ Cloudflare Worker (vinext)
   |-- LiveKit and Agora token APIs
   |-- LiveKit Webhook and Egress APIs
   |-- Cloudflare D1
-  `-- Calendar / Slack / Teams / CRM / optional memory and translation webhooks
+  `-- DeepL / Calendar / Slack / Teams / CRM / optional memory and translation webhooks
 ```
 
 ## Application boundaries
@@ -35,7 +35,7 @@ Cloudflare Worker (vinext)
 | Authentication | `app/producer-auth.ts` | Supabase token verification and producer authorization |
 | LiveKit token API | `app/api/livekit-token/route.ts` | Short-lived attendee room grants |
 | Agora token API | `app/api/agora-token/route.ts` | Allowlisted one-hour alternative media grants |
-| Translation API | `app/api/translation/route.ts` | Validated forwarding to an approved translation service |
+| Translation API | `app/api/translation/route.ts` | Server-side DeepL translation with a validated private-webhook fallback |
 | Producer room API | `app/api/producer/room/route.ts` | Participant listing, mute, removal, and Rescue Mode |
 | Venue API | `app/api/venue/route.ts` | Public real-time room totals, agenda, and announcements |
 | Support API | `app/api/support/route.ts` | Authenticated attendee support requests |

@@ -140,7 +140,7 @@ export default function DocumentationPage() {
             <h3>Agora</h3>
             <p>Provides an attendee-selectable audio/video path when configured. The server validates the venue-room allowlist and issues short-lived channel tokens; room chat, screen sharing, and LiveKit captions remain LiveKit-only. Demo mode never requests one.</p>
             <h3>Caption translation</h3>
-            <p>Finalized LiveKit captions can be sent to an approved private translation webhook. The interface labels unavailable translation clearly and never presents untranslated text as translated output.</p>
+            <p>Finalized LiveKit captions are translated server-side through DeepL when configured, with an approved private webhook available as a fallback. Credentials remain server-only, and the interface never presents untranslated text as translated output.</p>
             <h3>Supabase</h3>
             <p>Authenticates accounts with Google OAuth or email/password. Authorization is enforced again on every protected server endpoint, independent of the sign-in method or what the interface displays.</p>
             <h3>Cloudflare D1</h3>

@@ -121,7 +121,7 @@ Sign out and sign in again after changing role metadata.
 
 - The interface never fabricates captions. Confirm the LiveKit transcription
   agent is connected and publishes transcription text streams.
-- Confirm the attendee selected a language the agent produces.
+- Confirm the agent publishes finalized source captions and the attendee selected a supported DeepL target language.
 
 ## After an event
 

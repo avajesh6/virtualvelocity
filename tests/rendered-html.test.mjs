@@ -44,6 +44,16 @@ test("ships the two-sided Velocity Venue experience", async () => {
   assert.doesNotMatch(`${page}${layout}`, /codex-preview|SkeletonPreview/);
 });
 
+test("adds production security headers at the Worker boundary", async () => {
+  const worker = await readFile(new URL("worker/index.ts", root), "utf8");
+  assert.match(worker, /content-security-policy/);
+  assert.match(worker, /frame-ancestors 'none'/);
+  assert.match(worker, /strict-transport-security/);
+  assert.match(worker, /x-content-type-options/);
+  assert.match(worker, /permissions-policy/);
+  assert.match(worker, /withSecurityHeaders\(await handler\.fetch/);
+});
+
 test("keeps third-party credentials server-side", async () => {
   const [client, tokenRoute, agoraTokenRoute, translationRoute, producerRoute, envExample] = await Promise.all([
     readFile(new URL("app/conference-experience.tsx", root), "utf8"),

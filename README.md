@@ -79,6 +79,7 @@ RECORDING_S3_ENDPOINT=
 LIVEKIT_RTMP_URLS=
 MEMORY_GENERATION_WEBHOOK_URL=
 MEMORY_GENERATION_WEBHOOK_TOKEN=
+TRANSCRIPT_INGEST_TOKEN=
 PRODUCER_EMAILS=producer@example.com
 ```
 
@@ -93,9 +94,10 @@ private memory webhook only when transcript processing has been approved.
 Agora is an optional alternative media provider. Its token endpoint accepts only
 the four configured venue rooms and returns an explicit `503` until both Agora
 credentials are set. Agora supplies audio/video media; room chat, screen sharing,
-and LiveKit captions require the LiveKit provider. Real-time caption translation likewise remains unavailable
-until an approved translation webhook is configured; untranslated text is never
-presented as translated output.
+and LiveKit captions require the LiveKit provider. Real-time caption translation uses
+the server-side DeepL integration when `DEEPL_API_KEY` is configured, with the approved
+translation webhook retained as an optional fallback. Untranslated text is never presented
+as translated output.
 
 Producer mode uses Supabase Google OAuth or email/password sign-in. Google must be enabled in the Supabase provider settings as described in the deployment guide. Grant producer access separately with Supabase `app_metadata.role` (`producer` or `admin`) or the optional comma-separated `PRODUCER_EMAILS` allowlist.
 
@@ -111,6 +113,7 @@ The live HTTP suite checks failure handling and a 25-request concurrent smoke lo
 
 ## Documentation
 
+- [Project and technical brief for Cris](docs/CRIS_PROJECT_BRIEF.md) — submission overview, full stack, architecture, security, validation, and demo walkthrough
 - [Architecture](docs/ARCHITECTURE.md) — components, trust boundaries, data flow, and failure model
 - [API reference](docs/API.md) — public and producer endpoints, payloads, and errors
 - [Deployment guide](docs/DEPLOYMENT.md) — environment, migrations, validation, deployment, and rollback
