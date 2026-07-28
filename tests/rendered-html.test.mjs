@@ -62,11 +62,16 @@ test("keeps third-party credentials server-side", async () => {
   assert.match(agoraTokenRoute, /crypto\.getRandomValues/);
   assert.match(agoraTokenRoute, /cache-control/);
   assert.match(client, /Agora is unavailable for this event\. Choose LiveKit to join\./);
+  assert.match(translationRoute, /DEEPL_API_KEY/);
+  assert.match(translationRoute, /api-free\.deepl\.com\/v2\/translate/);
+  assert.match(translationRoute, /DeepL-Auth-Key/);
   assert.match(translationRoute, /TRANSLATION_WEBHOOK_URL/);
   assert.match(translationRoute, /AbortSignal\.timeout/);
+  assert.match(translationRoute, /DeepL translation quota has been exhausted/);
   assert.doesNotMatch(translationRoute, /Live AI translated|confidence: 0\.98/);
   assert.match(envExample, /LIVEKIT_API_KEY=/);
   assert.match(envExample, /AGORA_APP_CERTIFICATE=/);
+  assert.match(envExample, /DEEPL_API_KEY=/);
   assert.match(envExample, /TRANSLATION_WEBHOOK_URL=/);
   assert.match(envExample, /CRM_WEBHOOK_URL=/);
   assert.match(producerRoute, /authorizeProducerRequest/);

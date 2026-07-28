@@ -26,9 +26,10 @@ Connecting a custom domain remains the final launch TODO.
 | `LIVEKIT_API_SECRET` | Yes for live media | Yes | Server token and room administration |
 | `AGORA_APP_ID` | Agora media | No | Alternative Agora project identifier |
 | `AGORA_APP_CERTIFICATE` | Agora media | Yes | Server-only Agora token signing secret |
-| `TRANSLATION_WEBHOOK_URL` | Translation | Yes | Approved real-time translation service |
-| `TRANSLATION_WEBHOOK_TOKEN` | Optional | Yes | Translation service bearer token |
-| `TRANSLATION_PROVIDER_NAME` | Optional | No | Provider label shown with translated captions |
+| `DEEPL_API_KEY` | Translation | Yes | Preferred direct DeepL API credential; never exposed to clients |
+| `TRANSLATION_WEBHOOK_URL` | Optional fallback | Yes | Approved non-DeepL translation adapter |
+| `TRANSLATION_WEBHOOK_TOKEN` | Optional fallback | Yes | Translation adapter bearer token |
+| `TRANSLATION_PROVIDER_NAME` | Optional fallback | No | Adapter label shown with translated captions |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes for sign-in | No | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes for sign-in | No | Browser/server token validation |
 | `PRODUCER_EMAILS` | Optional | Yes | Comma-separated producer allowlist |
@@ -49,13 +50,18 @@ Connecting a custom domain remains the final launch TODO.
 | `MEMORY_GENERATION_WEBHOOK_TOKEN` | Optional | Yes | Bearer token for the memory service |
 | `TRANSCRIPT_INGEST_TOKEN` | Captions | Yes | Shared credential for the approved transcription agent |
 
-Never commit real secret values. `.env.example` documents names only.
+Never commit real secret values. `.env.example` documents names only. When
+`DEEPL_API_KEY` is configured, the server calls DeepL directly and ignores the
+generic webhook settings. Keys ending in `:fx` use DeepL's API Free endpoint;
+other keys use the Pro endpoint. Account usernames and passwords are never
+stored in the application or deployment environment.
 
-The translation webhook receives `{ "text": "…", "targetLanguage": "es" }`
+The optional translation webhook receives `{ "text": "…", "targetLanguage": "es" }`
 and must return `{ "translated": "…", "provider": "optional label" }` within
 eight seconds. Exercise each enabled media provider and translation language in
-the deployment rehearsal; missing providers surface as unavailable and do not
-fall back to simulated success.
+the deployment rehearsal; missing providers, invalid keys, rate limits, quota
+exhaustion, malformed responses, and timeouts surface as controlled errors and
+never fall back to simulated success.
 
 ## LiveKit webhooks, captions, and Egress
 

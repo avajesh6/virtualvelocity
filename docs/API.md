@@ -36,9 +36,11 @@ marked `no-store`. Invalid rooms return `400`; missing Agora credentials return
 ### `POST /api/translation`
 
 Forwards up to 2,000 characters of finalized caption text to the explicitly
-configured translation service. Supported target languages are `es`, `fr`,
-`de`, and `ja`. The endpoint returns `503` when no provider is configured and
-never manufactures translated text, confidence scores, or provider names.
+configured DeepL API account or optional translation adapter. Supported target
+languages are `es`, `fr`, `de`, and `ja`. The endpoint returns `503` when no
+provider is configured and never manufactures translated text, confidence
+scores, or provider names. Provider failures and malformed responses are
+converted to controlled `502`/`503`/`504` responses.
 
 ### `GET /api/venue`
 
