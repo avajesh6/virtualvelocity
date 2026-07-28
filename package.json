@@ -57,5 +57,6 @@
     "@esbuild-kit/core-utils": {
       "esbuild": "0.25.12"
     }
-  }
+  },
+  "packageManager": "npm@11.11.1"
 }
