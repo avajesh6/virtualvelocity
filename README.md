@@ -101,6 +101,14 @@ as translated output.
 
 Producer mode uses Supabase Google OAuth or email/password sign-in. Google must be enabled in the Supabase provider settings as described in the deployment guide. Grant producer access separately with Supabase `app_metadata.role` (`producer` or `admin`) or the optional comma-separated `PRODUCER_EMAILS` allowlist.
 
+To create or reset a local test producer account (email/password, producer role) without changing Google OAuth, put `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` in `.env.local` and run:
+
+```bash
+npm run auth:create-test-producer
+```
+
+Default credential: `producer.test@velocity.local` / `ProducerTest123!`. Override with `TEST_PRODUCER_EMAIL`, `TEST_PRODUCER_PASSWORD`, and `TEST_PRODUCER_NAME` if needed. The helper confirms the email and sets `app_metadata.role` to `producer`. Sign in from the existing auth dialog email/password fields; Google sign-in stays unchanged.
+
 ## Verification
 
 ```bash

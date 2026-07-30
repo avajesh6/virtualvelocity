@@ -14,7 +14,8 @@
     "test:live": "node --test tests/live-http.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit --incremental false",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "auth:create-test-producer": "node scripts/create-test-producer.mjs"
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.23",
